@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { performVpnCheck } from '../utils/device';
+import { checkVpnStatus } from '../utils/vpnDetector';
 
 interface VpnDetectionContextType {
     isVpnDetected: boolean;
@@ -16,7 +16,7 @@ export const VpnDetectionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Don't set isChecking to true here to avoid showing the spinner on every periodic check,
         // only on the initial load. The user will see the spinner in the popup itself.
         try {
-            const vpnResult = await performVpnCheck();
+            const vpnResult = await checkVpnStatus();
             setIsVpnDetected(vpnResult);
         } catch (error) {
             console.error("VPN check failed in provider:", error);
