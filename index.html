@@ -1509,6 +1509,64 @@
         .ban-notice-back-btn:hover {
             background-color: rgba(255, 255, 255, 0.2);
         }
+
+        /* Fingerprint Error Notice Styles */
+        .auth-container.fingerprint-error {
+            padding: 0;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ffc371 100%); /* Warning gradient */
+            color: var(--text-light);
+            animation: fadeInScale 0.5s ease-out;
+            overflow: hidden;
+        }
+        .fp-error-content {
+            padding: 2.5rem;
+            text-align: center;
+        }
+        .fp-error-icon {
+            margin-bottom: 1.5rem;
+            color: #fff;
+            filter: drop-shadow(0 0 10px rgba(0,0,0,0.3));
+        }
+        .fp-error-content h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0 0 0.5rem 0;
+            color: var(--text-light);
+        }
+        .fp-error-content p {
+            margin: 0 0 1.5rem 0;
+            color: #fff;
+            line-height: 1.6;
+        }
+        .fp-error-content ul {
+            list-style: none;
+            padding: 0;
+            margin: 0 auto 1.5rem auto;
+            display: inline-block;
+            text-align: left;
+            max-width: 300px;
+        }
+        .fp-error-content li {
+            background: rgba(255,255,255,0.1);
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            font-weight: 500;
+        }
+        .fp-error-back-btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--text-light);
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: background-color 0.2s;
+        }
+        .fp-error-back-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
     </style>
     <style id="admin-details-styles">
         /* Admin Match Details Page - Redesigned */

@@ -1,4 +1,5 @@
 
+
 import FingerprintJS from '@fingerprintjs/fingerprintjs-pro';
 import { supabase } from './supabase';
 import { v4 as uuidv4 } from 'uuid';
@@ -62,13 +63,14 @@ export const getVisitorId = async (): Promise<string> => {
       try {
         const fp = await loadFingerprint(settings.apiKey);
         if (!fp) {
-          throw new Error("FingerprintJS agent could not be loaded. Please check your API Key configuration.");
+          throw new Error("FINGERPRINT_FAILED");
         }
         const result = await fp.get();
         return result.visitorId;
       } catch (error) {
-        console.error('FingerprintJS error details:', error);
-        throw new Error("Device identification failed. This may be due to an ad-blocker, network issue, or an invalid API key configuration. Please disable your ad-blocker and try again.");
+        console.error('FingerprintJS error:', error);
+        // Throw a specific, catchable error message for the UI.
+        throw new Error("FINGERPRINT_FAILED");
       }
   } else {
       // Fallback to localStorage UUID if disabled
