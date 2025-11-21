@@ -1,9 +1,11 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { LudoLogoSVG, ShieldBanIconSVG } from '../assets/icons';
 import { useLanguage } from '../contexts/LanguageContext';
+import { getVisitorId } from '../utils/device';
 
 const Auth: React.FC = () => {
   const { t, languages, currentLang, changeLanguage } = useLanguage();
@@ -59,6 +61,9 @@ const Auth: React.FC = () => {
             }
         }
       } else {
+        // Asynchronously get the unique visitor ID, simulating FingerprintJS Pro
+        const deviceId = await getVisitorId();
+        
         const { error } = await (supabase!.auth as any).signUp({
             email: email,
             password: password,
@@ -68,6 +73,7 @@ const Auth: React.FC = () => {
                   phone: phoneNumber, // Keep for compatibility
                   mobile: phoneNumber, // Ensure it maps to 'mobile' column in profiles if triggers use that
                   referral_code: referralCode.trim(),
+                  device_id: deviceId, // Pass the fingerprint to the backend
                 },
             }
           }
@@ -76,7 +82,11 @@ const Auth: React.FC = () => {
         setMessage(t('auth_verify_email', 'Check your email for the verification link!'));
       }
     } catch (error: any) {
-      setError(error.error_description || error.message);
+      if (error.message && (error.message.includes('profiles_device_id_key') || error.message.includes('duplicate key value'))) {
+        setError('An account has already been created on this device.');
+      } else {
+        setError(error.error_description || error.message);
+      }
     } finally {
       setLoading(false);
     }
