@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { LudoLogoSVG, ShieldBanIconSVG } from '../assets/icons';
@@ -61,7 +59,7 @@ const Auth: React.FC = () => {
             }
         }
       } else {
-        // Asynchronously get the unique visitor ID, simulating FingerprintJS Pro
+        // Asynchronously get the unique visitor ID using the imported function
         const deviceId = await getVisitorId();
         
         const { error } = await (supabase!.auth as any).signUp({

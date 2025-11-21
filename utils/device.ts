@@ -24,13 +24,16 @@ const loadFingerprint = () => {
 
 /**
  * Retrieves a unique device identifier using the FingerprintJS Pro service.
- * It caches the agent loading promise to ensure high performance on subsequent calls.
+ * If it fails, it now throws an error instead of providing a fallback.
  * 
  * @returns {Promise<string>} A promise that resolves with the unique device ID (visitorId).
+ * @throws {Error} If device identification fails.
  */
 export const getVisitorId = async (): Promise<string> => {
   if (typeof window === 'undefined') {
-    return 'unsupported-env-' + Date.now();
+    // For server-side rendering or non-browser environments, we can't fingerprint.
+    // Throwing an error is consistent with the new behavior.
+    throw new Error("Device identification is not supported in this environment.");
   }
 
   try {
@@ -38,7 +41,7 @@ export const getVisitorId = async (): Promise<string> => {
     const fp = await loadFingerprint();
 
     if (!fp) {
-      throw new Error("FingerprintJS agent not loaded. Check API Key.");
+      throw new Error("FingerprintJS agent could not be loaded. Please check your API Key configuration.");
     }
 
     // Get the visitor identifier.
@@ -46,11 +49,10 @@ export const getVisitorId = async (): Promise<string> => {
     
     return result.visitorId;
   } catch (error) {
-    console.error('FingerprintJS error:', error);
+    console.error('FingerprintJS error details:', error);
     
-    // In case of an error (e.g., ad-blocker, network issue), provide a temporary,
-    // non-persistent identifier as a fallback. This ensures the signup flow
-    // can still proceed, though with weaker device identification for this session.
-    return 'fp-error-' + Date.now() + '-' + Math.random().toString(36).substring(2);
+    // Throw a user-friendly error that will be caught by the Auth component.
+    // This stops the signup process if a unique, persistent device ID cannot be obtained.
+    throw new Error("Device identification failed. This may be due to an ad-blocker, network issue, or an invalid API key configuration. Please disable your ad-blocker and try again.");
   }
 };
