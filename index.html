@@ -92,6 +92,203 @@
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
         }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+    <style id="landing-page-styles">
+        /* New Multi-Section Landing Page Styles */
+        .landing-page-container {
+            width: 100%;
+            color: var(--text-light);
+            background: linear-gradient(-45deg, #0f172a, #131d3a, #1e3c72, #2a5298);
+            background-size: 400% 400%;
+            animation: gradient 25s ease infinite;
+            overflow-x: hidden;
+        }
+        section {
+            padding: clamp(3rem, 10vw, 6rem) clamp(1rem, 5vw, 3rem);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section-title {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeInUp 1s ease-out;
+        }
+        .section-title h2 {
+            font-size: clamp(2rem, 6vw, 3rem);
+            font-weight: 700;
+            margin: 0 0 0.5rem 0;
+            color: var(--text-light);
+        }
+        .section-title p {
+            font-size: clamp(1rem, 2.5vw, 1.1rem);
+            color: #bdc3c7;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .landing-header {
+            position: sticky;
+            top: 0;
+            width: 100%;
+            padding: 1rem clamp(1rem, 5vw, 3rem);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .landing-header .logo { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-light); }
+        .landing-header .logo-title { font-size: 1.5rem; font-weight: 700; }
+        .main-nav { display: flex; gap: 1.5rem; }
+        .main-nav a { color: #bdc3c7; text-decoration: none; font-weight: 500; transition: color 0.3s; }
+        .main-nav a:hover, .main-nav a.active { color: var(--text-light); }
+        .mobile-menu-btn { display: none; } /* For potential future mobile menu */
+
+        /* Hero Section */
+        .hero-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            min-height: 40vh;
+            justify-content: center;
+        }
+        .hero-section h1 {
+            font-size: clamp(2.5rem, 8vw, 4.5rem);
+            font-weight: 800;
+            margin: 0 0 1rem 0;
+            letter-spacing: -1.5px;
+            line-height: 1.1;
+            background: linear-gradient(90deg, #ffffff, #a3bffa, #ffffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+            animation: fadeInUp 1s ease-out;
+        }
+        .hero-section .subtitle {
+            font-size: clamp(1rem, 3vw, 1.25rem);
+            margin: 0 auto 2rem auto;
+            max-width: 650px;
+            color: #e2e8f0;
+            line-height: 1.6;
+            animation: fadeInUp 1s ease-out 0.2s;
+            animation-fill-mode: both;
+        }
+        .cta-button {
+            padding: 1rem 2.5rem;
+            font-size: 1.1rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            color: var(--text-light);
+            background: linear-gradient(45deg, #e71e54, #ff3c83);
+            box-shadow: 0 5px 20px rgba(231, 30, 84, 0.4);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            animation: fadeInUp 1s ease-out 0.4s;
+            animation-fill-mode: both;
+        }
+        .cta-button:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(231, 30, 84, 0.5);
+        }
+
+        /* About Section */
+        .about-section .about-content {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            align-items: center;
+            gap: 1rem;
+        }
+        .about-image { animation: fadeInUp 1s ease-out; }
+        .about-image img { max-width: 100%; height: auto; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3)); }
+        .about-text { animation: fadeInUp 1s ease-out 0.2s; animation-fill-mode: both; }
+        .about-text h2 { font-size: clamp(1.8rem, 5vw, 2.5rem); margin-top: 0; }
+        .about-text p { color: #bdc3c7; line-height: 1.7; }
+        .about-text ul { list-style: none; padding-left: 0; margin-top: 1.5rem; }
+        .about-text li { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+        
+        /* Features Section */
+        #feature { background-color: rgba(0,0,0,0.2); }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+        .feature-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: background 0.3s ease, transform 0.3s ease;
+            text-align: center;
+            animation: fadeInUp 1s ease-out;
+        }
+        .feature-card:hover { transform: translateY(-8px); background: rgba(255, 255, 255, 0.1); }
+        .feature-icon { margin: 0 auto 1.5rem auto; color: var(--primary-red); }
+        .feature-card h3 { font-size: 1.5rem; margin: 0 0 0.5rem 0; }
+        .feature-card p { color: #bdc3c7; line-height: 1.6; margin: 0; }
+
+        /* Screenshot Section */
+        .screenshot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+        .screenshot-item { border-radius: 12px; overflow: hidden; box-shadow: 0 8px 25px rgba(0,0,0,0.3); transition: transform 0.3s; animation: fadeInUp 1s ease-out; }
+        .screenshot-item:hover { transform: scale(1.05); }
+        .screenshot-item img { width: 100%; height: auto; display: block; }
+
+        /* Testimonial Section */
+        #testimonial { background-color: rgba(0,0,0,0.2); }
+        .testimonial-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        .testimonial-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 2rem;
+            animation: fadeInUp 1s ease-out;
+        }
+        .testimonial-text { font-style: italic; color: #bdc3c7; line-height: 1.6; border-left: 3px solid var(--primary-red); padding-left: 1rem; margin-bottom: 1rem; }
+        .testimonial-author { display: flex; align-items: center; gap: 1rem; }
+        .author-avatar { width: 50px; height: 50px; border-radius: 50%; overflow: hidden; }
+        .author-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .author-name { font-weight: 700; }
+
+        /* Footer */
+        .landing-footer {
+            background-color: #0f172a;
+            padding: 3rem clamp(1rem, 5vw, 3rem);
+            text-align: center;
+        }
+        .social-links { display: flex; justify-content: center; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .social-links a { color: #bdc3c7; transition: color 0.3s, transform 0.3s; }
+        .social-links a:hover { color: var(--text-light); transform: translateY(-3px); }
+        .footer-nav { display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .footer-nav a { color: #bdc3c7; text-decoration: none; font-size: 0.9rem; transition: color 0.3s; }
+        .footer-nav a:hover { color: var(--text-light); }
+        .copyright { color: #7f8c8d; font-size: 0.8rem; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-nav { display: none; }
+            .about-section .about-content { grid-template-columns: 1fr; }
+            .about-image { margin-bottom: 2rem; }
+        }
     </style>
     <style id="dream-ludo-theme">
         /* App Layout */

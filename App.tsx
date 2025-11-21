@@ -41,6 +41,7 @@ import SimpleMessageModal from './components/SimpleMessageModal';
 // Import Language Provider
 import { LanguageProvider } from './contexts/LanguageContext';
 import { checkAppVersion } from './utils/cacheBuster';
+import Home from './components/Home';
 
 // Updated View type to include 'admin' base route and 'global-chat'
 export type View = 
@@ -83,6 +84,10 @@ function App() {
   
   // Loading state for initial session check
   const [isSessionLoading, setIsSessionLoading] = useState(true);
+
+  // New state to control showing Auth page vs Home page for logged out users
+  const [showAuth, setShowAuth] = useState(false);
+  const [showBanNotice, setShowBanNotice] = useState(false);
 
   const playerName = session?.user?.user_metadata?.full_name || session?.user?.email || 'Player';
   const playerId = session?.user?.id || null;
@@ -240,6 +245,13 @@ function App() {
   };
 
   useEffect(() => {
+    if (sessionStorage.getItem('showBanNotice') === 'true') {
+        setShowBanNotice(true);
+        sessionStorage.removeItem('showBanNotice');
+    }
+  }, []);
+
+  useEffect(() => {
     if (!supabase) return;
 
     const checkAdminRole = async (): Promise<boolean> => {
@@ -296,6 +308,7 @@ function App() {
     const { data: { subscription } } = (supabase.auth as any).onAuthStateChange((_event: any, session: any) => {
         setSession(session);
         if (_event === 'SIGNED_IN' && session?.user) {
+            setShowAuth(false); // Hide auth form after successful login
             checkAdminRole().then(isAdmin => {
                 const hash = window.location.hash;
                 if (!hash || hash === '#/' || hash === '') {
@@ -310,6 +323,8 @@ function App() {
             setGameCode(null);
             setView('tournaments');
             setIsAdmin(false);
+            setShowAuth(false); // Return to home page on logout
+            setShowBanNotice(false);
             try {
                 sessionStorage.removeItem('ludoGameCode');
             } catch (e) {
@@ -438,7 +453,7 @@ function App() {
   useEffect(() => {
     const rootElement = document.getElementById('root');
     if (rootElement) {
-      if (gameCode) {
+      if (gameCode || (!session && !showAuth)) { // Also remove padding for Home page
         rootElement.style.paddingTop = '0';
       } else {
         rootElement.style.paddingTop = '';
@@ -449,7 +464,7 @@ function App() {
         rootElement.style.paddingTop = '';
       }
     };
-  }, [gameCode]);
+  }, [gameCode, session, showAuth]);
 
   const handleJoinGame = (code: string) => {
     try {
@@ -475,6 +490,8 @@ function App() {
     if (supabase) {
         setIsMoreMenuOpen(false);
         await (supabase.auth as any).signOut();
+        setShowAuth(false);
+        setShowBanNotice(false);
     }
   }, []);
 
@@ -576,8 +593,16 @@ function App() {
         return <LoadingScreen message="Loading..." />;
     }
 
-    if (!session) {
+    // Show ban notice with auth form immediately
+    if (showBanNotice) {
         return <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)'}}><Auth /></div>;
+    }
+
+    if (!session) {
+        if (showAuth) {
+            return <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)'}}><Auth /></div>;
+        }
+        return <Home onNavigateToLogin={() => setShowAuth(true)} />;
     }
     
     if (gameCode) {
