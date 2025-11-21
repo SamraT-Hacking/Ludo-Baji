@@ -3,7 +3,7 @@ import FingerprintJS from '@fingerprintjs/fingerprintjs-pro';
 // IMPORTANT: This is the public API key you provided.
 // FIX: Explicitly type as string to prevent TypeScript from inferring a literal type,
 // which caused a comparison error on the placeholder check below.
-const FPJS_PUBLIC_API_KEY: string = 'FHm7nbgbid0FrT8lrkxG';
+const FPJS_PUBLIC_API_KEY: string = '7O7keYHQxtrFlKHyjPO6';
 
 // Cache the FingerprintJS promise to avoid re-initializing on every call.
 // This is more efficient and ensures the library is loaded only once per session.
@@ -12,7 +12,7 @@ let fpPromise: Promise<any> | null = null;
 const loadFingerprint = () => {
   if (!fpPromise) {
     if (!FPJS_PUBLIC_API_KEY || FPJS_PUBLIC_API_KEY === 'FHm7nbgbid0FrT8lrkxG') {
-      console.warn("FingerprintJS API Key is not set. Please update it in utils/device.ts");
+      console.warn("FingerprintJS API Key is not set or is still the default placeholder. Please update it in utils/device.ts");
       // Return a promise that resolves to null to handle this gracefully
       return Promise.resolve(null);
     }
