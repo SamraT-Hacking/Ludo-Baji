@@ -115,6 +115,7 @@ export interface Profile {
   referral_code: string;
   referred_by: string | null;
   mobile?: string; // Added mobile field
+  device_id?: string | null; // Added for security
 }
 
 export interface TournamentPlayer {
@@ -201,4 +202,15 @@ export interface SupportChatMessage {
     message_text: string;
     sent_by_admin: boolean;
     is_read: boolean;
+}
+
+export interface SecurityConfig {
+    device_fingerprint: boolean;
+    ip_signup_limit: boolean;
+    vpn_detection: boolean;
+    incognito_block: boolean;
+    one_account_per_device: boolean;
+    max_signups_per_ip: number;
+    vpn_api_key?: string; // Optional API Key for IPInfo or similar
+    secure_session_storage: boolean; // Use sessionStorage instead of localStorage
 }

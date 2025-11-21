@@ -1,5 +1,5 @@
 {
-  "name": "copy-of-dream-ludo-18-nov",
+  "name": "dream-ludo",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,7 +12,8 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "@supabase/supabase-js": "latest",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "@fingerprintjs/fingerprintjs": "4.5.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

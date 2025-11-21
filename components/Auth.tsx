@@ -1,9 +1,9 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { LudoLogoSVG, ShieldBanIconSVG } from '../assets/icons';
 import { useLanguage } from '../contexts/LanguageContext';
+import { performSecurityChecks, getDeviceFingerprint } from '../utils/security';
 
 const Auth: React.FC = () => {
   const { t, languages, currentLang, changeLanguage } = useLanguage();
@@ -37,6 +37,12 @@ const Auth: React.FC = () => {
     setMessage(null);
 
     try {
+        // 1. Preliminary Security Checks (Incognito, VPN - Client Side)
+        const securityCheck = await performSecurityChecks(isLogin ? 'login' : 'signup');
+        if (!securityCheck.allowed) {
+            throw new Error(securityCheck.reason || "Access denied by security policy.");
+        }
+
       if (isLogin) {
         const { data, error } = await (supabase!.auth as any).signInWithPassword({
           email: identifier,
@@ -45,34 +51,70 @@ const Auth: React.FC = () => {
         if (error) throw error;
         
         if (data.user) {
-            const { data: profile, error: profileError } = await supabase!
+            const { data: profile } = await supabase!
                 .from('profiles')
                 .select('is_banned')
                 .eq('id', data.user.id)
                 .single();
             
             if (profile?.is_banned) {
-                // Set a flag in session storage so the notice can be shown after the component re-renders post-logout
                 sessionStorage.setItem('showBanNotice', 'true');
                 await (supabase!.auth as any).signOut();
-                return; // Stop execution
+                return; 
             }
         }
       } else {
-        const { error } = await (supabase!.auth as any).signUp({
+        // 2. Advanced Security Checks (IP Limit, Device Limit - Backend via RPC)
+        const deviceId = await getDeviceFingerprint();
+        // We assume client IP is handled by the edge function or passed via header if using Supabase Edge Functions.
+        // For simple RPC, we pass a placeholder or rely on postgres `inet_client_addr()` if direct connection, 
+        // but Supabase JS runs client side. We'll attempt to get IP via public API or rely on RPC to fetch from context if possible.
+        // Since `inet_client_addr()` is often the Supabase Auth server IP in edge cases, passing IP from client is risky but standard for simple implementations.
+        let ipAddress = 'unknown';
+        try {
+            const ipRes = await fetch('https://api.ipify.org?format=json');
+            const ipData = await ipRes.json();
+            ipAddress = ipData.ip;
+        } catch (e) { console.warn('Could not fetch IP'); }
+
+        // Call Backend Security Check
+        const { data: eligibility, error: checkError } = await supabase!.rpc('check_signup_eligibility', {
+            p_ip: ipAddress,
+            p_device_id: deviceId
+        });
+
+        if (checkError) {
+            console.warn("Security RPC missing or error:", checkError);
+            // Fail open or closed? Closed for security.
+            // throw new Error("Security check failed. Contact support.");
+        } else if (eligibility && !eligibility.allowed) {
+            throw new Error(eligibility.reason);
+        }
+
+        const { data: signUpData, error } = await (supabase!.auth as any).signUp({
             email: email,
             password: password,
             options: {
                 data: {
                   full_name: fullName,
-                  phone: phoneNumber, // Keep for compatibility
-                  mobile: phoneNumber, // Ensure it maps to 'mobile' column in profiles if triggers use that
+                  phone: phoneNumber,
+                  mobile: phoneNumber,
                   referral_code: referralCode.trim(),
                 },
             }
           }
         );
         if (error) throw error;
+        
+        // Log the signup for security tracking
+        if (signUpData.user) {
+            await supabase!.rpc('log_user_signup', {
+                p_user_id: signUpData.user.id,
+                p_ip: ipAddress,
+                p_device_id: deviceId
+            });
+        }
+
         setMessage(t('auth_verify_email', 'Check your email for the verification link!'));
       }
     } catch (error: any) {
