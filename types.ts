@@ -201,11 +201,3 @@ export interface SupportChatMessage {
     sent_by_admin: boolean;
     is_read: boolean;
 }
-
-export interface SecurityConfig {
-    ipLimitEnabled?: boolean;
-    vpnBlockEnabled?: boolean;
-    incognitoBlockEnabled?: boolean;
-    deviceLockEnabled?: boolean;
-    vpnApiKey?: string;
-}

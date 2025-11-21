@@ -29,8 +29,7 @@ import ReferHistory from './components/ReferHistory';
 import ReferLeaderboard from './components/ReferLeaderboard';
 import SupportChatWidget from './components/SupportChatWidget';
 import GlobalChat from './components/GlobalChat';
-import { isIncognito } from './utils/security';
-import { GameStatus, Tournament, Notification, Profile as ProfileType, SecurityConfig } from './types';
+import { GameStatus, Tournament, Notification, Profile as ProfileType } from './types';
 import { themes, ThemeName } from './themes';
 import { supabase } from './utils/supabase';
 import LoadingScreen from './components/LoadingScreen';
@@ -83,10 +82,6 @@ function App() {
   // Loading state for initial session check
   const [isSessionLoading, setIsSessionLoading] = useState(true);
   
-  // Security State
-  const [isBlockedBySecurity, setIsBlockedBySecurity] = useState(false);
-  const [securityBlockMessage, setSecurityBlockMessage] = useState('');
-
   const playerName = session?.user?.user_metadata?.full_name || session?.user?.email || 'Player';
   const playerId = session?.user?.id || null;
   const sessionToken = session?.access_token || null;
@@ -96,25 +91,6 @@ function App() {
   // 1. VERSION CHECK & CACHE CLEANUP ON MOUNT
   useEffect(() => {
       checkAppVersion();
-  }, []);
-
-  // 2. Security Checks on Mount
-  useEffect(() => {
-    const runSecurityChecks = async () => {
-        if (!supabase) return;
-        const { data } = await supabase.from('app_settings').select('value').eq('key', 'security_config').single();
-        if (data?.value) {
-            const config = data.value as SecurityConfig;
-            if (config.incognitoBlockEnabled) {
-                const isPrivate = await isIncognito();
-                if (isPrivate) {
-                    setSecurityBlockMessage('Access from incognito or private browsing mode is not permitted.');
-                    setIsBlockedBySecurity(true);
-                }
-            }
-        }
-    };
-    runSecurityChecks();
   }, []);
 
   // Initialize App Theme
@@ -590,16 +566,6 @@ function App() {
   }
 
   const renderContent = () => {
-    if (isBlockedBySecurity) {
-        return (
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '1rem', textAlign: 'center' }}>
-                <h1 style={{ color: 'var(--primary-red)'}}>Access Denied</h1>
-                <p>{securityBlockMessage}</p>
-                <p>Please use a standard browser window to use this application.</p>
-            </div>
-        )
-    }
-
     if (isSessionLoading) {
         return <LoadingScreen message="Loading..." />;
     }

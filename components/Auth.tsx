@@ -1,11 +1,8 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { LudoLogoSVG, ShieldBanIconSVG } from '../assets/icons';
 import { useLanguage } from '../contexts/LanguageContext';
-import { SecurityConfig } from '../types';
-import { getDeviceFingerprint, isIncognito, isVpnOrProxy } from '../utils/security';
 
 const Auth: React.FC = () => {
   const { t, languages, currentLang, changeLanguage } = useLanguage();
@@ -15,7 +12,6 @@ const Auth: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showBanNotice, setShowBanNotice] = useState(false);
-  const [securityConfig, setSecurityConfig] = useState<SecurityConfig | null>(null);
 
   // Form fields
   const [identifier, setIdentifier] = useState('');
@@ -31,15 +27,6 @@ const Auth: React.FC = () => {
         setShowBanNotice(true);
         sessionStorage.removeItem('showBanNotice');
     }
-    // Fetch security config
-    const fetchSecConfig = async () => {
-        if (!supabase) return;
-        const { data } = await supabase.from('app_settings').select('value').eq('key', 'security_config').single();
-        if (data?.value) {
-            setSecurityConfig(data.value as SecurityConfig);
-        }
-    };
-    fetchSecConfig();
   }, []);
 
   const handleAuth = async (event: React.FormEvent) => {
@@ -71,27 +58,8 @@ const Auth: React.FC = () => {
             }
         }
       } else {
-        // --- PRE-SIGNUP SECURITY CHECKS ---
-        if (securityConfig?.incognitoBlockEnabled) {
-            const isPrivate = await isIncognito();
-            if (isPrivate) {
-                throw new Error("Signup is not allowed from a private or incognito window.");
-            }
-        }
-        if (securityConfig?.vpnBlockEnabled && securityConfig.vpnApiKey) {
-            setMessage("Checking network status...");
-            const { isVpn } = await isVpnOrProxy(securityConfig.vpnApiKey);
-            if (isVpn) {
-                throw new Error("Signup from VPNs, proxies, or hosting networks is not allowed.");
-            }
-            setMessage(null);
-        }
-
-        setMessage("Generating secure device ID...");
-        const deviceId = await getDeviceFingerprint();
-        setMessage(null);
-
-        const { error } = await (supabase!.auth as any).signUp({
+        // Sign Up Logic
+        const { data, error } = await (supabase!.auth as any).signUp({
             email: email,
             password: password,
             options: {
@@ -99,26 +67,32 @@ const Auth: React.FC = () => {
                   full_name: fullName,
                   phone: phoneNumber, // Keep for compatibility
                   mobile: phoneNumber, // Ensure it maps to 'mobile' column in profiles if triggers use that
-                  referral_code: referralCode.trim(),
-                  device_id: deviceId, // Pass fingerprint to backend trigger
+                  referral_code: referralCode ? referralCode.trim() : null,
                 },
             }
           }
         );
+        
         if (error) {
-            // Provide user-friendly messages for custom backend errors
-            if (error.message.includes('IP_LIMIT_EXCEEDED')) {
-                throw new Error("Too many accounts have been created from your network today. Please try again later.");
-            }
-            if (error.message.includes('DEVICE_ID_IN_USE')) {
-                throw new Error("An account has already been created from this device.");
-            }
             throw error;
         }
-        setMessage(t('auth_verify_email', 'Check your email for the verification link!'));
+        
+        // If user created but no session, likely email confirmation enabled
+        if (data.user && !data.session) {
+             setMessage(t('auth_verify_email', 'Account created! Check your email for the verification link.'));
+        } else if (data.user && data.session) {
+             // Auto login success (if email confirm is off)
+             // Profile trigger might take a ms, waiting or just letting app redirect
+        }
       }
     } catch (error: any) {
-      setError(error.error_description || error.message);
+      console.error("Auth Error:", error);
+      // Translate common Supabase errors if needed
+      let errMsg = error.error_description || error.message;
+      if (errMsg.includes("Database error saving new user")) {
+          errMsg = "System error: Please contact support or try again later. (DB Trigger Fail)";
+      }
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
@@ -300,7 +274,7 @@ const Auth: React.FC = () => {
             {/* Submit */}
             <button type="submit" className="auth-submit-btn" disabled={loading}>
               {loading 
-                ? message || t('auth_processing', 'Processing...') 
+                ? (message ? message : t('auth_processing', 'Processing...'))
                 : (isLogin ? t('auth_btn_login', 'Log In') : t('auth_btn_signup', 'Sign Up'))
               }
             </button>
