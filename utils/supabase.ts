@@ -236,7 +236,8 @@ begin
     values (new.id, new.raw_user_meta_data->>'full_name', referrer_id, user_device_id);
   exception
     when unique_violation then
-      raise exception 'DUPLICATE_DEVICE'; -- Custom error for client-side detection
+      -- Raise a specific, structured exception that the client can more reliably parse.
+      raise exception using errcode = '23505', message = 'DUPLICATE_DEVICE', hint = 'A profile with this device_id already exists.';
   end;
   
   return new;
