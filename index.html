@@ -1509,64 +1509,6 @@
         .ban-notice-back-btn:hover {
             background-color: rgba(255, 255, 255, 0.2);
         }
-
-        /* Fingerprint Error Notice Styles */
-        .auth-container.fingerprint-error {
-            padding: 0;
-            background: linear-gradient(135deg, #ff6b6b 0%, #ffc371 100%); /* Warning gradient */
-            color: var(--text-light);
-            animation: fadeInScale 0.5s ease-out;
-            overflow: hidden;
-        }
-        .fp-error-content {
-            padding: 2.5rem;
-            text-align: center;
-        }
-        .fp-error-icon {
-            margin-bottom: 1.5rem;
-            color: #fff;
-            filter: drop-shadow(0 0 10px rgba(0,0,0,0.3));
-        }
-        .fp-error-content h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            margin: 0 0 0.5rem 0;
-            color: var(--text-light);
-        }
-        .fp-error-content p {
-            margin: 0 0 1.5rem 0;
-            color: #fff;
-            line-height: 1.6;
-        }
-        .fp-error-content ul {
-            list-style: none;
-            padding: 0;
-            margin: 0 auto 1.5rem auto;
-            display: inline-block;
-            text-align: left;
-            max-width: 300px;
-        }
-        .fp-error-content li {
-            background: rgba(255,255,255,0.1);
-            padding: 0.75rem;
-            border-radius: 8px;
-            margin-bottom: 0.75rem;
-            font-weight: 500;
-        }
-        .fp-error-back-btn {
-            padding: 12px 24px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            color: var(--text-light);
-            background-color: rgba(255, 255, 255, 0.1);
-            transition: background-color 0.2s;
-        }
-        .fp-error-back-btn:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-        }
     </style>
     <style id="admin-details-styles">
         /* Admin Match Details Page - Redesigned */
@@ -3056,71 +2998,6 @@
             justify-content: center;
             align-items: center;
             color: var(--text-secondary);
-        }
-    </style>
-    <style id="vpn-styles">
-        .vpn-popup-overlay {
-            position: fixed;
-            inset: 0;
-            background-color: rgba(15, 23, 42, 0.8); /* slate-900 with opacity */
-            z-index: 9999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            backdrop-filter: blur(8px);
-            animation: fadeIn 0.3s ease;
-        }
-        .vpn-popup-content {
-            background: linear-gradient(145deg, #1e3c72, #2a5298);
-            color: #e2e8f0; /* slate-200 */
-            padding: 3rem;
-            border-radius: 20px;
-            width: 90%;
-            max-width: 500px;
-            text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
-            animation: fadeInScale 0.4s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
-        }
-        .vpn-popup-icon {
-            margin-bottom: 1.5rem;
-            color: #f59e0b; /* amber-500 */
-            filter: drop-shadow(0 0 15px rgba(245, 158, 11, 0.5));
-        }
-        .vpn-popup-icon svg {
-            width: 80px;
-            height: 80px;
-        }
-        .vpn-popup-content h1 {
-            font-size: 2.2rem;
-            font-weight: 700;
-            margin: 0 0 1rem 0;
-            color: #fff;
-        }
-        .vpn-popup-content p {
-            line-height: 1.7;
-            margin: 0 0 2rem 0;
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
-        .vpn-rechecking-status {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 1rem;
-            padding: 0.75rem;
-            background: rgba(0,0,0,0.2);
-            border-radius: 12px;
-        }
-        .vpn-rechecking-status .spinner {
-            width: 24px;
-            height: 24px;
-            border-width: 3px;
-            margin: 0;
-        }
-        .vpn-rechecking-status span {
-            font-weight: 500;
-            color: #f1f5f9; /* slate-100 */
         }
     </style>
 </head>

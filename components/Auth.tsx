@@ -1,10 +1,7 @@
 
-
-
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
-import { LudoLogoSVG, ShieldBanIconSVG, ShieldWarningIconSVG } from '../assets/icons';
+import { LudoLogoSVG, ShieldBanIconSVG } from '../assets/icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getVisitorId } from '../utils/device';
 
@@ -16,7 +13,6 @@ const Auth: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showBanNotice, setShowBanNotice] = useState(false);
-  const [showFingerprintErrorNotice, setShowFingerprintErrorNotice] = useState(false);
 
   // Form fields
   const [identifier, setIdentifier] = useState('');
@@ -64,18 +60,7 @@ const Auth: React.FC = () => {
         }
       } else {
         // Asynchronously get the unique visitor ID using the imported function
-        let deviceId;
-        try {
-            deviceId = await getVisitorId();
-        } catch (error: any) {
-             if (error.message === 'FINGERPRINT_FAILED') {
-                setShowFingerprintErrorNotice(true);
-                setLoading(false);
-                return;
-             }
-             // For other errors from getVisitorId, re-throw to be caught by the outer catch
-             throw error;
-        }
+        const deviceId = await getVisitorId();
         
         const { error } = await (supabase!.auth as any).signUp({
             email: email,
@@ -95,15 +80,7 @@ const Auth: React.FC = () => {
         setMessage(t('auth_verify_email', 'Check your email for the verification link!'));
       }
     } catch (error: any) {
-      const errorMessage = (error.message || '').toLowerCase();
-      
-      // Check for any indication of a duplicate device error, from our custom error or the raw PG error.
-      const isDuplicateDeviceError = 
-        errorMessage.includes('duplicate_device') || 
-        errorMessage.includes('profiles_device_id_key') ||
-        errorMessage.includes('duplicate key value violates unique constraint');
-
-      if (isDuplicateDeviceError) {
+      if (error.message && (error.message.includes('profiles_device_id_key') || error.message.includes('duplicate key value'))) {
         setError('An account has already been created on this device.');
       } else {
         setError(error.error_description || error.message);
@@ -141,7 +118,7 @@ const Auth: React.FC = () => {
   const IconGift = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg>;
 
   return (
-    <div className={`auth-container ${showBanNotice ? 'banned' : ''} ${showFingerprintErrorNotice ? 'fingerprint-error' : ''}`}>
+    <div className={`auth-container ${showBanNotice ? 'banned' : ''}`}>
       {showBanNotice ? (
           <div className="ban-notice-content">
               <div className="ban-notice-icon" dangerouslySetInnerHTML={{ __html: ShieldBanIconSVG() }} />
@@ -154,21 +131,6 @@ const Auth: React.FC = () => {
               </p>
               <button className="ban-notice-back-btn" onClick={() => setShowBanNotice(false)}>
                   {t('ban_notice_btn', 'Try another account')}
-              </button>
-          </div>
-      ) : showFingerprintErrorNotice ? (
-          <div className="fp-error-content">
-              <div className="fp-error-icon" dangerouslySetInnerHTML={{ __html: ShieldWarningIconSVG() }} />
-              <h1>Security Check Failed</h1>
-              <p>
-                  We couldn't verify your device. This can happen for a few reasons:
-              </p>
-              <ul>
-                  <li>1. Don't create multiple accounts.</li>
-                  <li>2. Turn off Ad Blockers.</li>
-              </ul>
-              <button className="fp-error-back-btn" onClick={() => setShowFingerprintErrorNotice(false)}>
-                  Try Again
               </button>
           </div>
       ) : (

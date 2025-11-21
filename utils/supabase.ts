@@ -206,7 +206,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- New user trigger function (MODIFIED for device ID and custom error)
+-- New user trigger function (MODIFIED for device ID)
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
@@ -230,15 +230,9 @@ begin
     select id into referrer_id from public.profiles where referral_code = user_referral_code;
   end if;
 
-  -- Insert new user with device ID, with exception handling for duplicates.
-  begin
-    insert into public.profiles (id, username, referred_by, device_id)
-    values (new.id, new.raw_user_meta_data->>'full_name', referrer_id, user_device_id);
-  exception
-    when unique_violation then
-      -- Raise a specific, structured exception that the client can more reliably parse.
-      raise exception using errcode = '23505', message = 'DUPLICATE_DEVICE', hint = 'A profile with this device_id already exists.';
-  end;
+  -- Insert new user with device ID. The unique constraint will handle duplicates.
+  insert into public.profiles (id, username, referred_by, device_id)
+  values (new.id, new.raw_user_meta_data->>'full_name', referrer_id, user_device_id);
   
   return new;
 end;
