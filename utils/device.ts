@@ -1,58 +1,84 @@
-import FingerprintJS from '@fingerprintjs/fingerprintjs-pro';
 
-// IMPORTANT: This is the public API key you provided.
-// FIX: Explicitly type as string to prevent TypeScript from inferring a literal type,
-// which caused a comparison error on the placeholder check below.
-const FPJS_PUBLIC_API_KEY: string = '7O7keYHQxtrFlKHyjPO6';
+import FingerprintJS from '@fingerprintjs/fingerprintjs-pro';
+import { supabase } from './supabase';
+import { v4 as uuidv4 } from 'uuid';
+
+// Cache for settings to avoid repeated DB calls
+let securitySettingsCache: { enabled: boolean; apiKey: string } | null = null;
+
+const getSecuritySettings = async (): Promise<{ enabled: boolean; apiKey: string }> => {
+    if (securitySettingsCache) {
+        return securitySettingsCache;
+    }
+    if (!supabase) {
+        console.warn("Supabase not available in device.ts, defaulting to disabled FingerprintJS.");
+        return { enabled: false, apiKey: '' };
+    }
+    try {
+        const { data } = await supabase.from('app_settings').select('value').eq('key', 'fingerprintjs_settings').single();
+        const settings = (data?.value as any) || { enabled: false, apiKey: '' };
+        securitySettingsCache = settings;
+        return settings;
+    } catch (error) {
+        console.error("Failed to fetch security settings:", error);
+        return { enabled: false, apiKey: '' };
+    }
+};
 
 // Cache the FingerprintJS promise to avoid re-initializing on every call.
-// This is more efficient and ensures the library is loaded only once per session.
 let fpPromise: Promise<any> | null = null;
+let loadedApiKey: string | null = null;
 
-const loadFingerprint = () => {
-  if (!fpPromise) {
-    if (!FPJS_PUBLIC_API_KEY || FPJS_PUBLIC_API_KEY === 'FHm7nbgbid0FrT8lrkxG') {
-      console.warn("FingerprintJS API Key is not set or is still the default placeholder. Please update it in utils/device.ts");
-      // Return a promise that resolves to null to handle this gracefully
+const loadFingerprint = (apiKey: string) => {
+  // If promise doesn't exist or if the API key has changed, re-load.
+  if (!fpPromise || loadedApiKey !== apiKey) {
+    if (!apiKey) {
+      console.warn("FingerprintJS API Key is not set.");
       return Promise.resolve(null);
     }
-    // Load the FingerprintJS agent
-    fpPromise = FingerprintJS.load({ apiKey: FPJS_PUBLIC_API_KEY });
+    loadedApiKey = apiKey;
+    fpPromise = FingerprintJS.load({ apiKey });
   }
   return fpPromise;
 };
 
 /**
- * Retrieves a unique device identifier using the FingerprintJS Pro service.
- * If it fails, it now throws an error instead of providing a fallback.
+ * Retrieves a unique device identifier.
+ * Uses FingerprintJS Pro if enabled in admin settings.
+ * Otherwise, falls back to a persistent UUID stored in localStorage.
  * 
- * @returns {Promise<string>} A promise that resolves with the unique device ID (visitorId).
- * @throws {Error} If device identification fails.
+ * @returns {Promise<string>} A promise that resolves with the unique device ID.
+ * @throws {Error} If FingerprintJS is enabled but fails to get an ID.
  */
 export const getVisitorId = async (): Promise<string> => {
   if (typeof window === 'undefined') {
-    // For server-side rendering or non-browser environments, we can't fingerprint.
-    // Throwing an error is consistent with the new behavior.
     throw new Error("Device identification is not supported in this environment.");
   }
+  
+  const settings = await getSecuritySettings();
 
-  try {
-    // Get the FingerprintJS agent instance.
-    const fp = await loadFingerprint();
-
-    if (!fp) {
-      throw new Error("FingerprintJS agent could not be loaded. Please check your API Key configuration.");
-    }
-
-    // Get the visitor identifier.
-    const result = await fp.get();
-    
-    return result.visitorId;
-  } catch (error) {
-    console.error('FingerprintJS error details:', error);
-    
-    // Throw a user-friendly error that will be caught by the Auth component.
-    // This stops the signup process if a unique, persistent device ID cannot be obtained.
-    throw new Error("Device identification failed. This may be due to an ad-blocker, network issue, or an invalid API key configuration. Please disable your ad-blocker and try again.");
+  if (settings.enabled && settings.apiKey) {
+      // Use FingerprintJS if enabled
+      try {
+        const fp = await loadFingerprint(settings.apiKey);
+        if (!fp) {
+          throw new Error("FingerprintJS agent could not be loaded. Please check your API Key configuration.");
+        }
+        const result = await fp.get();
+        return result.visitorId;
+      } catch (error) {
+        console.error('FingerprintJS error details:', error);
+        throw new Error("Device identification failed. This may be due to an ad-blocker, network issue, or an invalid API key configuration. Please disable your ad-blocker and try again.");
+      }
+  } else {
+      // Fallback to localStorage UUID if disabled
+      console.log("FingerprintJS is disabled by admin. Using localStorage fallback for device ID.");
+      const STORAGE_KEY = 'fallback_device_id';
+      let deviceId = localStorage.getItem(STORAGE_KEY);
+      if (!deviceId) {
+          deviceId = uuidv4();
+          localStorage.setItem(STORAGE_KEY, deviceId);
+      }
+      return deviceId;
   }
 };

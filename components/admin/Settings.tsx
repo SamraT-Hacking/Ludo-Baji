@@ -4,7 +4,7 @@ import { supabase } from '../../utils/supabase';
 import { HowToPlayVideo } from '../../types';
 import { TrashIconSVG, PlusIconSVG } from '../../assets/icons';
 
-type Tab = 'content' | 'setups' | 'videos' | 'deposit';
+type Tab = 'content' | 'setups' | 'videos' | 'deposit' | 'security';
 
 interface OfflineMethod {
     id: string;
@@ -67,8 +67,8 @@ const SimpleRichTextEditor: React.FC<RichTextEditorProps> = ({ initialValue, onC
     };
 
     return (
-        <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#fff' }}>
-            <div style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f7fafc', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+        <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#fff' }}>
+            <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', backgroundColor: '#f7fafc', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
                 <button type="button" onClick={() => exec('bold')} style={{ ...toolbarBtnStyle, fontWeight: 'bold' }} title="Bold">B</button>
                 <button type="button" onClick={() => exec('italic')} style={{ ...toolbarBtnStyle, fontStyle: 'italic' }} title="Italic">I</button>
                 <button type="button" onClick={() => exec('underline')} style={{ ...toolbarBtnStyle, textDecoration: 'underline' }} title="Underline">U</button>
@@ -153,6 +153,9 @@ const Settings: React.FC = () => {
     const [newMethodNumber, setNewMethodNumber] = useState('');
     const [newMethodLogoFile, setNewMethodLogoFile] = useState<File | null>(null);
     const [uploadingLogo, setUploadingLogo] = useState(false);
+    
+    const [securitySettings, setSecuritySettings] = useState({ enabled: false, apiKey: '' });
+    const [savingSecurity, setSavingSecurity] = useState(false);
 
 
     const fetchSettings = useCallback(async () => {
@@ -211,6 +214,9 @@ const Settings: React.FC = () => {
                 fetchedDepositSettings.offline.methods = [];
             }
             setDepositSettings(fetchedDepositSettings);
+
+            const fetchedSecuritySettings = getSetting('fingerprintjs_settings', { enabled: false, apiKey: '' });
+            setSecuritySettings(fetchedSecuritySettings);
 
 
         } catch (e: any) {
@@ -497,10 +503,30 @@ const Settings: React.FC = () => {
             setSavingVideos(false);
         }
     };
+    
+    const handleSaveSecuritySettings = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!supabase) return;
+        setSavingSecurity(true);
+        setMessage(null);
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({ key: 'fingerprintjs_settings', value: securitySettings });
+
+            if (error) throw error;
+            setMessage({ type: 'success', text: 'Security settings updated successfully!' });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (e: any) {
+            setMessage({ type: 'error', text: `Error saving security settings: ${e.message}` });
+        } finally {
+            setSavingSecurity(false);
+        }
+    };
 
     // Styles
     const headerStyle: React.CSSProperties = { fontSize: '2rem', marginBottom: '2rem' };
-    const containerStyle: React.CSSProperties = { backgroundColor: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.05)', marginBottom: '1.5rem' };
+    const containerStyle: React.CSSProperties = { backgroundColor: 'var(--bg-card)', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.05)', marginBottom: '1.5rem', border: '1px solid var(--border-color)' };
     const labelStyle: React.CSSProperties = { fontWeight: 'bold', marginBottom: '0.5rem', display: 'block', fontSize: '1.2rem' };
     const buttonStyle: React.CSSProperties = { padding: '0.75rem 1.5rem', borderRadius: '5px', border: 'none', cursor: 'pointer', color: 'white', backgroundColor: '#48bb78', fontSize: '1.1rem', marginTop: '1rem' };
     const messageStyle: React.CSSProperties = { padding: '1rem', borderRadius: '5px', marginBottom: '1.5rem', textAlign: 'center', color: 'white' };
@@ -512,16 +538,17 @@ const Settings: React.FC = () => {
     const modalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 };
     const modalContentStyle: React.CSSProperties = { backgroundColor: 'white', padding: '2rem', borderRadius: '8px', width: '90%', maxWidth: '500px' };
     const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' };
-    const tabContainerStyle: React.CSSProperties = { display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '2rem', overflowX: 'auto' };
-    const tabButtonStyle: React.CSSProperties = { padding: '1rem 1.5rem', border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem', color: '#4a5568', fontWeight: 500, borderBottom: '3px solid transparent', whiteSpace: 'nowrap' };
-    const activeTabButtonStyle: React.CSSProperties = { color: '#2d3748', fontWeight: 600, borderBottom: '3px solid #4299e1' };
-    const methodCardStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '0.5rem' };
+    const tabContainerStyle: React.CSSProperties = { display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '2rem', overflowX: 'auto' };
+    const tabButtonStyle: React.CSSProperties = { padding: '1rem 1.5rem', border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 500, borderBottom: '3px solid transparent', whiteSpace: 'nowrap' };
+    const activeTabButtonStyle: React.CSSProperties = { color: 'var(--text-main)', fontWeight: 600, borderBottom: '3px solid #4299e1' };
+    const methodCardStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '0.5rem' };
     const methodLogoStyle: React.CSSProperties = { width: '40px', height: '40px', objectFit: 'contain', marginRight: '1rem', borderRadius: '4px', backgroundColor: '#f7fafc' };
 
     const TABS: { id: Tab; label: string }[] = [
         { id: 'content', label: 'Content & Rules' },
         { id: 'setups', label: 'App Setups' },
         { id: 'deposit', label: 'Deposit' },
+        { id: 'security', label: 'Security' },
         { id: 'videos', label: 'How to Play Videos' }
     ];
 
@@ -708,6 +735,56 @@ const Settings: React.FC = () => {
                     </div>
                 </>
             )}
+            
+            {activeTab === 'security' && (
+                <div style={containerStyle}>
+                    <form onSubmit={handleSaveSecuritySettings}>
+                        <label style={labelStyle}>FingerprintJS Device Identification</label>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                            Use FingerprintJS Pro to generate a unique device ID for each user to help prevent duplicate accounts on the same device. 
+                            If disabled, a less secure browser-based ID will be used as a fallback.
+                        </p>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                            <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '60px', height: '34px' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={securitySettings.enabled} 
+                                    onChange={(e) => setSecuritySettings(s => ({ ...s, enabled: e.target.checked }))}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span className="slider round" style={{ 
+                                    position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, 
+                                    backgroundColor: securitySettings.enabled ? '#48bb78' : '#ccc', transition: '.4s', borderRadius: '34px' 
+                                }}>
+                                    <span style={{ 
+                                        position: 'absolute', content: '""', height: '26px', width: '26px', left: securitySettings.enabled ? '30px' : '4px', bottom: '4px', 
+                                        backgroundColor: 'white', transition: '.4s', borderRadius: '50%' 
+                                    }}></span>
+                                </span>
+                            </label>
+                            <span style={{fontWeight: 600, color: securitySettings.enabled ? '#48bb78' : '#e53e3e'}}>{securitySettings.enabled ? 'ENABLED' : 'DISABLED'}</span>
+                        </div>
+
+                        {securitySettings.enabled && (
+                            <div>
+                                <label style={{fontSize: '1rem', fontWeight: 600, display: 'block', marginBottom: '0.5rem'}}>FingerprintJS Public API Key</label>
+                                <input 
+                                    type="text" 
+                                    value={securitySettings.apiKey} 
+                                    onChange={e => setSecuritySettings(s => ({ ...s, apiKey: e.target.value }))} 
+                                    style={inputStyle} 
+                                    placeholder="Enter your public API key" 
+                                />
+                            </div>
+                        )}
+                        
+                        <button type="submit" style={buttonStyle} disabled={savingSecurity || loading}>
+                            {savingSecurity ? 'Saving...' : 'Save Security Settings'}
+                        </button>
+                    </form>
+                </div>
+            )}
 
             {activeTab === 'deposit' && (
                 <div style={containerStyle}>
@@ -727,27 +804,27 @@ const Settings: React.FC = () => {
                                 
                                 {depositSettings.active_gateway === 'offline' && (
                                     <>
-                                        <hr style={{border: 'none', borderTop: '1px solid #e2e8f0'}} />
+                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
                                         <div>
                                             <h3 style={{marginTop: 0}}>Offline Payment Methods</h3>
-                                            <p style={{color: '#666', fontSize: '0.9rem'}}>Manage the payment methods (e.g., Bkash, Nagad) displayed to users for manual deposits.</p>
+                                            <p style={{color: 'var(--text-secondary)', fontSize: '0.9rem'}}>Manage the payment methods (e.g., Bkash, Nagad) displayed to users for manual deposits.</p>
                                             
-                                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1.5rem', backgroundColor: '#f7fafc', padding: '1rem', borderRadius: '8px'}}>
+                                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1.5rem', backgroundColor: 'var(--bg-main)', padding: '1rem', borderRadius: '8px'}}>
                                                 <div>
-                                                    <label style={{fontSize: '0.85rem', color: '#4a5568'}}>Method Name</label>
+                                                    <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Method Name</label>
                                                     <input type="text" placeholder="e.g. Bkash Personal" value={newMethodName} onChange={e => setNewMethodName(e.target.value)} style={inputStyle} />
                                                 </div>
                                                 <div>
-                                                    <label style={{fontSize: '0.85rem', color: '#4a5568'}}>Wallet Number</label>
+                                                    <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Wallet Number</label>
                                                     <input type="text" placeholder="e.g. 017..." value={newMethodNumber} onChange={e => setNewMethodNumber(e.target.value)} style={inputStyle} />
                                                 </div>
                                                 <div>
-                                                     <label style={{fontSize: '0.85rem', color: '#4a5568'}}>Method Logo</label>
+                                                     <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Method Logo</label>
                                                      <input 
                                                         type="file" 
                                                         accept="image/*" 
                                                         onChange={e => setNewMethodLogoFile(e.target.files ? e.target.files[0] : null)} 
-                                                        style={{border: '1px solid #ccc', padding: '4px', borderRadius: '4px', backgroundColor: 'white', width: '100%'}} 
+                                                        style={{border: '1px solid var(--border-color)', padding: '4px', borderRadius: '4px', backgroundColor: 'var(--input-bg)', width: '100%', color: 'var(--text-main)'}} 
                                                      />
                                                 </div>
                                                 <button type="button" onClick={handleAddMethod} disabled={uploadingLogo} style={{...buttonStyle, marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
@@ -766,7 +843,7 @@ const Settings: React.FC = () => {
                                                             )}
                                                             <div>
                                                                 <div style={{fontWeight: 'bold'}}>{method.name}</div>
-                                                                <div style={{fontFamily: 'monospace', color: '#666'}}>{method.number}</div>
+                                                                <div style={{fontFamily: 'monospace', color: 'var(--text-secondary)'}}>{method.number}</div>
                                                             </div>
                                                         </div>
                                                         <button type="button" onClick={() => handleDeleteMethod(method.id)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#e53e3e'}}>
@@ -784,7 +861,7 @@ const Settings: React.FC = () => {
                                                 <textarea 
                                                     value={depositSettings.offline.instructions} 
                                                     onChange={e => setDepositSettings(s => ({...s, offline: {...s.offline, instructions: e.target.value}}))} 
-                                                    style={{width: '100%', minHeight: '80px', padding: '0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.95rem'}} 
+                                                    style={{width: '100%', minHeight: '80px', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.95rem', background: 'var(--input-bg)', color: 'var(--text-main)'}} 
                                                     placeholder="Any extra instructions for the user..."
                                                 />
                                             </div>
@@ -794,7 +871,7 @@ const Settings: React.FC = () => {
                                 
                                 {depositSettings.active_gateway === 'uddoktapay' && (
                                     <>
-                                        <hr style={{border: 'none', borderTop: '1px solid #e2e8f0'}} />
+                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
                                         <div>
                                             <h3 style={{marginTop: 0}}>UddoktaPay Settings</h3>
                                             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
@@ -807,7 +884,7 @@ const Settings: React.FC = () => {
                                 
                                 {depositSettings.active_gateway === 'paytm' && (
                                     <>
-                                        <hr style={{border: 'none', borderTop: '1px solid #e2e8f0'}} />
+                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
                                         <div>
                                             <h3 style={{marginTop: 0}}>Paytm Settings</h3>
                                             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
@@ -831,7 +908,7 @@ const Settings: React.FC = () => {
 
                                 {depositSettings.active_gateway === 'razorpay' && (
                                     <>
-                                        <hr style={{border: 'none', borderTop: '1px solid #e2e8f0'}} />
+                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
                                         <div>
                                             <h3 style={{marginTop: 0}}>Razorpay Settings</h3>
                                             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
