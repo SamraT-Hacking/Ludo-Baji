@@ -104,7 +104,7 @@ const SimpleRichTextEditor: React.FC<RichTextEditorProps> = ({ initialValue, onC
 
 // --- Settings Component ---
 const Settings: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<Tab>('content');
+    const [activeTab, setActiveTab] = useState<Tab>('setups');
     const [rules, setRules] = useState('');
     const [aboutUs, setAboutUs] = useState('');
     const [privacyPolicy, setPrivacyPolicy] = useState('');
@@ -545,10 +545,10 @@ const Settings: React.FC = () => {
     const methodLogoStyle: React.CSSProperties = { width: '40px', height: '40px', objectFit: 'contain', marginRight: '1rem', borderRadius: '4px', backgroundColor: '#f7fafc' };
 
     const TABS: { id: Tab; label: string }[] = [
-        { id: 'content', label: 'Content & Rules' },
         { id: 'setups', label: 'App Setups' },
         { id: 'deposit', label: 'Deposit' },
         { id: 'security', label: 'Security' },
+        { id: 'content', label: 'Content & Rules' },
         { id: 'videos', label: 'How to Play Videos' }
     ];
 
