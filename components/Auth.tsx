@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { LudoLogoSVG, ShieldBanIconSVG, ShieldWarningIconSVG } from '../assets/icons';
@@ -93,7 +94,12 @@ const Auth: React.FC = () => {
         setMessage(t('auth_verify_email', 'Check your email for the verification link!'));
       }
     } catch (error: any) {
-      if (error.message && (error.message.includes('profiles_device_id_key') || error.message.includes('duplicate key value'))) {
+      // Check for our custom error from the trigger first.
+      if (error.message && error.message.includes('DUPLICATE_DEVICE')) {
+        setError('An account has already been created on this device.');
+      } 
+      // Fallback for other duplicate errors.
+      else if (error.message && (error.message.includes('profiles_device_id_key') || error.message.includes('duplicate key value'))) {
         setError('An account has already been created on this device.');
       } else {
         setError(error.error_description || error.message);
