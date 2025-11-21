@@ -521,13 +521,9 @@ function App() {
       setView('admin');
   }
 
-  const currentTheme = themes[theme];
-
   const appStyle: React.CSSProperties = {
     minHeight: '100vh',
     transition: 'background-color 0.3s ease',
-    ...currentTheme,
-    backgroundColor: 'var(--app-background)',
   };
 
   const renderCurrentView = () => {

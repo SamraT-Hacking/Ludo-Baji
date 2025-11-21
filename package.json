@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
     "@supabase/supabase-js": "latest",
     "uuid": "9.0.1",
-    "@fingerprintjs/fingerprintjs": "3"
+    "@fingerprintjs/fingerprintjs": "3",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
