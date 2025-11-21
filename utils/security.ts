@@ -1,113 +1,57 @@
-
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
-import { supabase } from './supabase';
-import { SecurityConfig } from '../types';
 
-// Initialize FingerprintJS agent once
-const fpPromise = FingerprintJS.load();
-
+// Get unique device fingerprint
 export const getDeviceFingerprint = async (): Promise<string> => {
-    const fp = await fpPromise;
+    const fp = await FingerprintJS.load();
     const result = await fp.get();
     return result.visitorId;
 };
 
-export const checkIncognitoMode = async (): Promise<boolean> => {
-    // Heuristic check for Private/Incognito modes
-    // Note: This is a cat-and-mouse game. Browsers try to hide this status.
-    // Using Storage Quota estimation is a common method.
-    if ('storage' in navigator && 'estimate' in navigator.storage) {
-        const { quota } = await navigator.storage.estimate();
-        if (quota && quota < 120000000) { // < 120MB is suspicious for Chrome/Firefox private
-            return true;
+// Detect incognito mode using the filesystem API heuristic
+export const isIncognito = async (): Promise<boolean> => {
+    return new Promise((resolve) => {
+        try {
+            const fs = (window as any).RequestFileSystem || (window as any).webkitRequestFileSystem;
+            if (!fs) {
+                // Fallback for browsers without the API (e.g., Firefox, modern Safari)
+                if (navigator.storage && navigator.storage.estimate) {
+                    navigator.storage.estimate().then(({ quota }) => {
+                        // Incognito mode often has a much smaller quota. 120MB is a common threshold.
+                        resolve(quota ? quota < 120000000 : false);
+                    }).catch(() => resolve(false));
+                } else {
+                    resolve(false); // Fail open if no reliable method found.
+                }
+                return;
+            }
+            // FIX: 'TEMPORARY' is a non-standard property on the window object for the deprecated FileSystem API. Cast to 'any' to resolve the TypeScript error.
+            fs((window as any).TEMPORARY, 100, () => resolve(false), () => resolve(true));
+        } catch (e) {
+            resolve(true); // If the API call throws, it's a strong indicator of private mode.
         }
-    }
-    return false;
+    });
 };
 
-export const checkVPN = async (apiKey?: string): Promise<boolean> => {
-    // Without a backend proxy or a paid API key exposed securely, 
-    // client-side VPN checks are limited.
-    // This implementation uses a placeholder or a provided API key for ipinfo.io if available.
-    
-    if (!apiKey) return false; // Cannot check without service
 
+// Check for VPN/Proxy using ipinfo.io
+export const isVpnOrProxy = async (apiKey: string): Promise<{ isVpn: boolean; error?: string }> => {
+    if (!apiKey) {
+        return { isVpn: false, error: 'API key is missing.' };
+    }
     try {
         const response = await fetch(`https://ipinfo.io/json?token=${apiKey}`);
+        if (!response.ok) {
+            console.warn('VPN check failed: Could not contact IP info service.');
+            return { isVpn: false }; // Fail open (allow signup) if the service is down
+        }
         const data = await response.json();
-        
-        // Basic check: usually hosting providers or non-residential ISPs are flagged
-        // Note: A real VPN detection API (like IPQualityScore) is better but requires payment.
-        // This is a basic implementation.
-        
-        // Example logic if using a service that returns privacy flags
-        if (data.privacy?.vpn || data.privacy?.proxy || data.privacy?.tor) {
-            return true;
+        if (data.privacy) {
+            const isVpn = data.privacy.vpn || data.privacy.proxy || data.privacy.hosting;
+            return { isVpn };
         }
-        
-        // Fallback check on organization (often VPNs use datacenter orgs)
-        const org = (data.org || '').toLowerCase();
-        const suspiciousKeywords = ['vpn', 'hosting', 'datacenter', 'cloud', 'digitalocean', 'aws', 'google'];
-        if (suspiciousKeywords.some(keyword => org.includes(keyword))) {
-            return true;
-        }
-
-        return false;
-    } catch (e) {
-        console.error("VPN check failed", e);
-        return false; // Fail open to avoid blocking legitimate users on error
-    }
-};
-
-export const getSecurityConfig = async (): Promise<SecurityConfig> => {
-    if (!supabase) throw new Error("Supabase not initialized");
-    
-    const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'security_config')
-        .single();
-        
-    const defaultConfig: SecurityConfig = {
-        device_fingerprint: true,
-        ip_signup_limit: true,
-        vpn_detection: false,
-        incognito_block: false,
-        one_account_per_device: false,
-        max_signups_per_ip: 3,
-        secure_session_storage: false
-    };
-
-    if (data && data.value) {
-        return { ...defaultConfig, ...data.value };
-    }
-    return defaultConfig;
-};
-
-export const performSecurityChecks = async (type: 'signup' | 'login' | 'general'): Promise<{ allowed: boolean, reason?: string }> => {
-    try {
-        const config = await getSecurityConfig();
-        
-        // 1. Incognito Check
-        if (config.incognito_block) {
-            const isIncognito = await checkIncognitoMode();
-            if (isIncognito) return { allowed: false, reason: "Private/Incognito mode is not allowed." };
-        }
-
-        // 2. VPN Check
-        if (config.vpn_detection) {
-            const isVPN = await checkVPN(config.vpn_api_key);
-            if (isVPN) return { allowed: false, reason: "VPN or Proxy connections are not allowed." };
-        }
-
-        // 3. Device Fingerprint uniqueness (Logic handled during auth action via RPC usually, but preliminary check here)
-        const deviceId = await getDeviceFingerprint();
-        if (!deviceId) return { allowed: false, reason: "Could not identify device." };
-
-        return { allowed: true };
-    } catch (e) {
-        console.error("Security check error:", e);
-        // Default to allow if checks fail due to network, to prevent lockout, unless critical
-        return { allowed: true }; 
+        return { isVpn: false };
+    } catch (error) {
+        console.warn('VPN check failed with an error:', error);
+        return { isVpn: false }; // Fail open
     }
 };

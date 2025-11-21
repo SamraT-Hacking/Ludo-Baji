@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useGameServer } from './hooks/useGameServer';
 import Game from './components/Game';
@@ -28,8 +29,8 @@ import ReferHistory from './components/ReferHistory';
 import ReferLeaderboard from './components/ReferLeaderboard';
 import SupportChatWidget from './components/SupportChatWidget';
 import GlobalChat from './components/GlobalChat';
-
-import { GameStatus, Tournament, Notification, Profile as ProfileType } from './types';
+import { isIncognito } from './utils/security';
+import { GameStatus, Tournament, Notification, Profile as ProfileType, SecurityConfig } from './types';
 import { themes, ThemeName } from './themes';
 import { supabase } from './utils/supabase';
 import LoadingScreen from './components/LoadingScreen';
@@ -40,7 +41,6 @@ import SimpleMessageModal from './components/SimpleMessageModal';
 // Import Language Provider
 import { LanguageProvider } from './contexts/LanguageContext';
 import { checkAppVersion } from './utils/cacheBuster';
-import { getSecurityConfig, performSecurityChecks } from './utils/security';
 
 // Updated View type to include 'admin' base route and 'global-chat'
 export type View = 
@@ -61,14 +61,10 @@ function App() {
   const [session, setSession] = useState<any | null>(null);
   const [currentView, setCurrentView] = useState<View>('tournaments');
   const [isAdmin, setIsAdmin] = useState(false);
-  // isAdminView is now derived effectively from currentView === 'admin'
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [adminStatus, setAdminStatus] = useState<'online' | 'offline'>('offline');
   const [adminCommission, setAdminCommission] = useState(0);
-  
-  // Security State
-  const [securityBlock, setSecurityBlock] = useState<string | null>(null);
   
   // App Configuration State
   const [appConfig, setAppConfig] = useState({
@@ -86,6 +82,10 @@ function App() {
   
   // Loading state for initial session check
   const [isSessionLoading, setIsSessionLoading] = useState(true);
+  
+  // Security State
+  const [isBlockedBySecurity, setIsBlockedBySecurity] = useState(false);
+  const [securityBlockMessage, setSecurityBlockMessage] = useState('');
 
   const playerName = session?.user?.user_metadata?.full_name || session?.user?.email || 'Player';
   const playerId = session?.user?.id || null;
@@ -97,33 +97,24 @@ function App() {
   useEffect(() => {
       checkAppVersion();
   }, []);
-  
-  // 2. GLOBAL SECURITY CHECK ON MOUNT
+
+  // 2. Security Checks on Mount
   useEffect(() => {
-      const checkSecurity = async () => {
-          const status = await performSecurityChecks('general');
-          if (!status.allowed) {
-              setSecurityBlock(status.reason || "Access Denied");
-          }
-          
-          // Handle Secure Session Storage Config
-          try {
-              const config = await getSecurityConfig();
-              if (config.secure_session_storage) {
-                  // If enabled, we should ensure localStorage is empty of auth tokens if possible,
-                  // but Supabase JS defaults to localStorage.
-                  // We can clear it on window close to simulate session storage behavior.
-                  window.onbeforeunload = () => {
-                      // This is a partial implementation as Supabase client handles persistence.
-                      // true "HttpOnly" or memory-only requires configuring the Supabase client instance 
-                      // to use a different storage provider, which is complex to hot-swap.
-                      // Clearing specifically auth tokens:
-                      // Object.keys(localStorage).forEach(key => { if(key.startsWith('sb-')) localStorage.removeItem(key) });
-                  };
-              }
-          } catch(e) {}
-      };
-      checkSecurity();
+    const runSecurityChecks = async () => {
+        if (!supabase) return;
+        const { data } = await supabase.from('app_settings').select('value').eq('key', 'security_config').single();
+        if (data?.value) {
+            const config = data.value as SecurityConfig;
+            if (config.incognitoBlockEnabled) {
+                const isPrivate = await isIncognito();
+                if (isPrivate) {
+                    setSecurityBlockMessage('Access from incognito or private browsing mode is not permitted.');
+                    setIsBlockedBySecurity(true);
+                }
+            }
+        }
+    };
+    runSecurityChecks();
   }, []);
 
   // Initialize App Theme
@@ -156,18 +147,23 @@ function App() {
         if (inactivityTimer) clearTimeout(inactivityTimer);
         inactivityTimer = setTimeout(() => {
             console.log("User inactive for 1 hour. Refreshing session...");
+            // Clear app-specific temporary storage
             try {
                 sessionStorage.removeItem('ludoGameCode');
                 sessionStorage.removeItem('pendingTransactionId');
             } catch (e) {
                 console.warn("Could not clear session storage", e);
             }
+            // Reload to refresh data and state, but keep auth cookie (handled by Supabase/Browser)
             window.location.reload();
         }, 3600000); // 1 hour in ms
     };
 
+    // Listen for activity events
     const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
     events.forEach(event => document.addEventListener(event, resetInactivityTimer));
+
+    // Start timer
     resetInactivityTimer();
 
     return () => {
@@ -196,8 +192,10 @@ function App() {
       };
       fetchConfig();
       
+      // Update document title
       document.title = appConfig.appTitle;
 
+      // Subscribe to changes
       const channel = supabase.channel('public:app_settings:config')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: "key=eq.app_config" }, payload => {
             const newVal = payload.new as any;
@@ -211,8 +209,9 @@ function App() {
         .subscribe();
         
       return () => { supabase.removeChannel(channel); };
-  }, [appConfig.appTitle]); 
+  }, [appConfig.appTitle]); // Re-run if title changes to update document.title
 
+  // Re-update title when state changes effectively
   useEffect(() => {
       document.title = appConfig.appTitle;
   }, [appConfig.appTitle]);
@@ -221,6 +220,7 @@ function App() {
   const fetchUnreadCount = useCallback(async () => {
     if (!supabase || !playerId) return;
 
+    // Get IDs of notifications the user has read
     const { data: readStatuses, error: readError } = await supabase
         .from('notification_read_status')
         .select('notification_id')
@@ -232,6 +232,7 @@ function App() {
     }
     const readNotificationIds = readStatuses.map(s => s.notification_id);
 
+    // Count all notifications that are NOT in the read list
     let query = supabase
         .from('notifications')
         .select('id', { count: 'exact', head: true });
@@ -250,6 +251,7 @@ function App() {
   }, [playerId]);
   
   const setView = (view: View) => {
+    // If switching to admin, we let AdminPanel handle the sub-route default
     const path = view === 'admin' ? '/admin/dashboard' : `/${view}`;
     history.pushState({ view }, '', `/#${path}`);
     setCurrentView(view);
@@ -356,6 +358,7 @@ function App() {
     useEffect(() => {
         const handlePopState = (event: PopStateEvent) => {
             const hash = window.location.hash.replace(/^#\//, '');
+            // Split by ? to ignore query params when determining view
             const [path] = hash.split('?');
             const [viewStr, overlay] = path.split('/');
             
@@ -374,7 +377,7 @@ function App() {
         };
 
         window.addEventListener('popstate', handlePopState);
-        handlePopState({} as PopStateEvent); 
+        handlePopState({} as PopStateEvent); // Handle initial load
 
         return () => window.removeEventListener('popstate', handlePopState);
     }, []);
@@ -453,6 +456,7 @@ function App() {
         };
     }, []);
     
+  // Effect to manage root padding for fullscreen game view
   useEffect(() => {
     const rootElement = document.getElementById('root');
     if (rootElement) {
@@ -582,6 +586,7 @@ function App() {
             break;
     }
     
+    // Only wrap in page-content for specific views to handle scrolling properly within the component
     if (currentView !== 'tournaments' && currentView !== 'global-chat') {
         return <div className="page-content">{content}</div>;
     }
@@ -589,14 +594,14 @@ function App() {
   }
 
   const renderContent = () => {
-    if (securityBlock) {
+    if (isBlockedBySecurity) {
         return (
-            <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center', flexDirection: 'column'}}>
-                <div style={{color: '#e53e3e', marginBottom: '1rem'}} dangerouslySetInnerHTML={{__html: ShieldBanIconSVG()}} />
-                <h2 style={{color: '#c53030'}}>Security Block</h2>
-                <p>{securityBlock}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '1rem', textAlign: 'center' }}>
+                <h1 style={{ color: 'var(--primary-red)'}}>Access Denied</h1>
+                <p>{securityBlockMessage}</p>
+                <p>Please use a standard browser window to use this application.</p>
             </div>
-        );
+        )
     }
 
     if (isSessionLoading) {
@@ -728,9 +733,6 @@ function App() {
             {session && (
                 <>
                     <SupportChatWidget />
-                    <div style={{ zIndex: 997 }}>
-                         <React.Fragment /> 
-                    </div>
                 </>
             )}
         </>

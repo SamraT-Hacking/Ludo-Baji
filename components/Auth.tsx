@@ -1,9 +1,11 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { LudoLogoSVG, ShieldBanIconSVG } from '../assets/icons';
 import { useLanguage } from '../contexts/LanguageContext';
-import { performSecurityChecks, getDeviceFingerprint } from '../utils/security';
+import { SecurityConfig } from '../types';
+import { getDeviceFingerprint, isIncognito, isVpnOrProxy } from '../utils/security';
 
 const Auth: React.FC = () => {
   const { t, languages, currentLang, changeLanguage } = useLanguage();
@@ -13,6 +15,7 @@ const Auth: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showBanNotice, setShowBanNotice] = useState(false);
+  const [securityConfig, setSecurityConfig] = useState<SecurityConfig | null>(null);
 
   // Form fields
   const [identifier, setIdentifier] = useState('');
@@ -28,6 +31,15 @@ const Auth: React.FC = () => {
         setShowBanNotice(true);
         sessionStorage.removeItem('showBanNotice');
     }
+    // Fetch security config
+    const fetchSecConfig = async () => {
+        if (!supabase) return;
+        const { data } = await supabase.from('app_settings').select('value').eq('key', 'security_config').single();
+        if (data?.value) {
+            setSecurityConfig(data.value as SecurityConfig);
+        }
+    };
+    fetchSecConfig();
   }, []);
 
   const handleAuth = async (event: React.FormEvent) => {
@@ -37,12 +49,6 @@ const Auth: React.FC = () => {
     setMessage(null);
 
     try {
-        // 1. Preliminary Security Checks (Incognito, VPN - Client Side)
-        const securityCheck = await performSecurityChecks(isLogin ? 'login' : 'signup');
-        if (!securityCheck.allowed) {
-            throw new Error(securityCheck.reason || "Access denied by security policy.");
-        }
-
       if (isLogin) {
         const { data, error } = await (supabase!.auth as any).signInWithPassword({
           email: identifier,
@@ -51,70 +57,64 @@ const Auth: React.FC = () => {
         if (error) throw error;
         
         if (data.user) {
-            const { data: profile } = await supabase!
+            const { data: profile, error: profileError } = await supabase!
                 .from('profiles')
                 .select('is_banned')
                 .eq('id', data.user.id)
                 .single();
             
             if (profile?.is_banned) {
+                // Set a flag in session storage so the notice can be shown after the component re-renders post-logout
                 sessionStorage.setItem('showBanNotice', 'true');
                 await (supabase!.auth as any).signOut();
-                return; 
+                return; // Stop execution
             }
         }
       } else {
-        // 2. Advanced Security Checks (IP Limit, Device Limit - Backend via RPC)
-        const deviceId = await getDeviceFingerprint();
-        // We assume client IP is handled by the edge function or passed via header if using Supabase Edge Functions.
-        // For simple RPC, we pass a placeholder or rely on postgres `inet_client_addr()` if direct connection, 
-        // but Supabase JS runs client side. We'll attempt to get IP via public API or rely on RPC to fetch from context if possible.
-        // Since `inet_client_addr()` is often the Supabase Auth server IP in edge cases, passing IP from client is risky but standard for simple implementations.
-        let ipAddress = 'unknown';
-        try {
-            const ipRes = await fetch('https://api.ipify.org?format=json');
-            const ipData = await ipRes.json();
-            ipAddress = ipData.ip;
-        } catch (e) { console.warn('Could not fetch IP'); }
-
-        // Call Backend Security Check
-        const { data: eligibility, error: checkError } = await supabase!.rpc('check_signup_eligibility', {
-            p_ip: ipAddress,
-            p_device_id: deviceId
-        });
-
-        if (checkError) {
-            console.warn("Security RPC missing or error:", checkError);
-            // Fail open or closed? Closed for security.
-            // throw new Error("Security check failed. Contact support.");
-        } else if (eligibility && !eligibility.allowed) {
-            throw new Error(eligibility.reason);
+        // --- PRE-SIGNUP SECURITY CHECKS ---
+        if (securityConfig?.incognitoBlockEnabled) {
+            const isPrivate = await isIncognito();
+            if (isPrivate) {
+                throw new Error("Signup is not allowed from a private or incognito window.");
+            }
+        }
+        if (securityConfig?.vpnBlockEnabled && securityConfig.vpnApiKey) {
+            setMessage("Checking network status...");
+            const { isVpn } = await isVpnOrProxy(securityConfig.vpnApiKey);
+            if (isVpn) {
+                throw new Error("Signup from VPNs, proxies, or hosting networks is not allowed.");
+            }
+            setMessage(null);
         }
 
-        const { data: signUpData, error } = await (supabase!.auth as any).signUp({
+        setMessage("Generating secure device ID...");
+        const deviceId = await getDeviceFingerprint();
+        setMessage(null);
+
+        const { error } = await (supabase!.auth as any).signUp({
             email: email,
             password: password,
             options: {
                 data: {
                   full_name: fullName,
-                  phone: phoneNumber,
-                  mobile: phoneNumber,
+                  phone: phoneNumber, // Keep for compatibility
+                  mobile: phoneNumber, // Ensure it maps to 'mobile' column in profiles if triggers use that
                   referral_code: referralCode.trim(),
+                  device_id: deviceId, // Pass fingerprint to backend trigger
                 },
             }
           }
         );
-        if (error) throw error;
-        
-        // Log the signup for security tracking
-        if (signUpData.user) {
-            await supabase!.rpc('log_user_signup', {
-                p_user_id: signUpData.user.id,
-                p_ip: ipAddress,
-                p_device_id: deviceId
-            });
+        if (error) {
+            // Provide user-friendly messages for custom backend errors
+            if (error.message.includes('IP_LIMIT_EXCEEDED')) {
+                throw new Error("Too many accounts have been created from your network today. Please try again later.");
+            }
+            if (error.message.includes('DEVICE_ID_IN_USE')) {
+                throw new Error("An account has already been created from this device.");
+            }
+            throw error;
         }
-
         setMessage(t('auth_verify_email', 'Check your email for the verification link!'));
       }
     } catch (error: any) {
@@ -300,7 +300,7 @@ const Auth: React.FC = () => {
             {/* Submit */}
             <button type="submit" className="auth-submit-btn" disabled={loading}>
               {loading 
-                ? t('auth_processing', 'Processing...') 
+                ? message || t('auth_processing', 'Processing...') 
                 : (isLogin ? t('auth_btn_login', 'Log In') : t('auth_btn_signup', 'Sign Up'))
               }
             </button>
