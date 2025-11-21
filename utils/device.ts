@@ -1,5 +1,6 @@
 
 
+
 import FingerprintJS from '@fingerprintjs/fingerprintjs-pro';
 import { supabase } from './supabase';
 import { v4 as uuidv4 } from 'uuid';
@@ -83,4 +84,41 @@ export const getVisitorId = async (): Promise<string> => {
       }
       return deviceId;
   }
+};
+
+/**
+ * Performs a real-time check for VPN/proxy usage using FingerprintJS Pro.
+ * @returns {Promise<boolean>} A promise that resolves to true if a VPN is detected, false otherwise.
+ */
+export const performVpnCheck = async (): Promise<boolean> => {
+    if (typeof window === 'undefined') {
+        return false; // No VPN check in a non-browser environment.
+    }
+
+    const settings = await getSecuritySettings();
+
+    if (settings.enabled && settings.apiKey) {
+        try {
+            const fp = await loadFingerprint(settings.apiKey);
+            if (!fp) {
+                console.warn("FingerprintJS not loaded, cannot perform VPN check.");
+                return false;
+            }
+            // Use extendedResult: true to get Smart Signals like VPN detection.
+            const result = await fp.get({ extendedResult: true });
+            
+            // The result structure for VPN is { vpn: { data: { result: boolean, ... } } }
+            const isVpn = result.vpn?.data?.result === true;
+            console.log(`VPN Check: ${isVpn}`);
+            return isVpn;
+            
+        } catch (error) {
+            console.error('FingerprintJS VPN check error:', error);
+            // In case of an API error, fail safe (don't block the user).
+            return false;
+        }
+    } else {
+        // If FingerprintJS is not enabled in settings, we cannot check for VPN.
+        return false;
+    }
 };

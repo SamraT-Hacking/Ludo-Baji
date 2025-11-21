@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useGameServer } from './hooks/useGameServer';
 import Game from './components/Game';
@@ -29,6 +30,7 @@ import ReferHistory from './components/ReferHistory';
 import ReferLeaderboard from './components/ReferLeaderboard';
 import SupportChatWidget from './components/SupportChatWidget';
 import GlobalChat from './components/GlobalChat';
+import VpnPopup from './components/VpnPopup'; // Import VPN Popup
 
 import { GameStatus, Tournament, Notification, Profile as ProfileType } from './types';
 import { themes, ThemeName } from './themes';
@@ -40,6 +42,7 @@ import SimpleMessageModal from './components/SimpleMessageModal';
 
 // Import Language Provider
 import { LanguageProvider } from './contexts/LanguageContext';
+import { VpnDetectionProvider } from './contexts/VpnDetectionContext'; // Import VPN Provider
 import { checkAppVersion } from './utils/cacheBuster';
 
 // Updated View type to include 'admin' base route and 'global-chat'
@@ -716,11 +719,14 @@ function App() {
 
   return (
     <LanguageProvider>
-      <div style={appStyle}>
-        <AppConfigContext.Provider value={appConfig}>
-          {renderContent()}
-        </AppConfigContext.Provider>
-      </div>
+      <VpnDetectionProvider>
+        <div style={appStyle}>
+          <AppConfigContext.Provider value={appConfig}>
+            {renderContent()}
+            <VpnPopup />
+          </AppConfigContext.Provider>
+        </div>
+      </VpnDetectionProvider>
     </LanguageProvider>
   );
 }
