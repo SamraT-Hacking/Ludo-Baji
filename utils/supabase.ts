@@ -1,6 +1,7 @@
 
 
 
+
 import { createClient } from '@supabase/supabase-js';
 
 // IMPORTANT: Replace with your actual Supabase project URL and anon key
@@ -221,7 +222,7 @@ begin
 
   -- Check if device ID is provided; if not, block the signup.
   if user_device_id is null or user_device_id = '' then
-     raise exception 'A device ID is required for signup. Please enable cookies/local storage.';
+     raise exception 'A unique device identifier is required for signup.';
   end if;
   
   -- Find the referrer's ID if the code is valid
