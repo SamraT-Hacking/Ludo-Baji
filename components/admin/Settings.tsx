@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../utils/supabase';
-import { HowToPlayVideo } from '../../types';
-import { TrashIconSVG, PlusIconSVG } from '../../assets/icons';
+import { HowToPlayVideo, SecurityConfig } from '../../types';
+import { TrashIconSVG, PlusIconSVG, CopyIconSVG } from '../../assets/icons';
 
-type Tab = 'content' | 'setups' | 'videos' | 'deposit';
+type Tab = 'content' | 'setups' | 'videos' | 'deposit' | 'security';
 
 interface OfflineMethod {
     id: string;
@@ -67,13 +67,13 @@ const SimpleRichTextEditor: React.FC<RichTextEditorProps> = ({ initialValue, onC
     };
 
     return (
-        <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#fff' }}>
-            <div style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f7fafc', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+        <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}>
+            <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-main)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
                 <button type="button" onClick={() => exec('bold')} style={{ ...toolbarBtnStyle, fontWeight: 'bold' }} title="Bold">B</button>
                 <button type="button" onClick={() => exec('italic')} style={{ ...toolbarBtnStyle, fontStyle: 'italic' }} title="Italic">I</button>
                 <button type="button" onClick={() => exec('underline')} style={{ ...toolbarBtnStyle, textDecoration: 'underline' }} title="Underline">U</button>
-                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px', marginRight: '8px', border: '1px solid #ddd', borderRadius: '4px', padding: '2px' }}>
-                    <label htmlFor="colorPicker" style={{ fontSize: '12px', marginRight: '4px', color: '#666', paddingLeft: '4px' }}>Color:</label>
+                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px', marginRight: '8px', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '2px' }}>
+                    <label htmlFor="colorPicker" style={{ fontSize: '12px', marginRight: '4px', color: 'var(--text-secondary)', paddingLeft: '4px' }}>Color:</label>
                     <input 
                         id="colorPicker"
                         type="color" 
@@ -96,7 +96,7 @@ const SimpleRichTextEditor: React.FC<RichTextEditorProps> = ({ initialValue, onC
                 ref={contentRef}
                 contentEditable
                 onInput={handleInput}
-                style={{ minHeight: '250px', padding: '12px', outline: 'none', lineHeight: '1.6', fontSize: '16px' }}
+                style={{ minHeight: '250px', padding: '12px', outline: 'none', lineHeight: '1.6', fontSize: '16px', color: 'var(--text-main)' }}
             />
         </div>
     );
@@ -154,6 +154,18 @@ const Settings: React.FC = () => {
     const [newMethodLogoFile, setNewMethodLogoFile] = useState<File | null>(null);
     const [uploadingLogo, setUploadingLogo] = useState(false);
 
+    // Security Settings State
+    const [securityConfig, setSecurityConfig] = useState<SecurityConfig>({
+        ipLimitEnabled: false,
+        vpnBlockEnabled: false,
+        incognitoBlockEnabled: false,
+        deviceLockEnabled: false,
+        vpnApiKey: ''
+    });
+    const [savingSecurity, setSavingSecurity] = useState(false);
+    const [showSqlModal, setShowSqlModal] = useState(false);
+    const [sqlCopied, setSqlCopied] = useState(false);
+
 
     const fetchSettings = useCallback(async () => {
         if (!supabase) return;
@@ -167,7 +179,7 @@ const Settings: React.FC = () => {
             
             const getSetting = (key: string, defaultValue: any) => {
                 const setting = data.find(s => s.key === key);
-                return setting ? setting.value : defaultValue;
+                return setting ? { ...defaultValue, ...setting.value } : defaultValue;
             }
 
             setRules(getSetting('rules_and_policy', { text: '' }).text);
@@ -191,6 +203,11 @@ const Settings: React.FC = () => {
             setReferralBonus(getSetting('referral_bonus_amount', { amount: 0 }).amount);
             setRefereeBonus(getSetting('referee_bonus_amount', { amount: 0 }).amount);
             setReferralMatchBonus(getSetting('referral_match_bonus', { amount: 0 }).amount);
+            
+            setSecurityConfig(getSetting('security_config', {
+                ipLimitEnabled: false, vpnBlockEnabled: false, incognitoBlockEnabled: false, 
+                deviceLockEnabled: false, vpnApiKey: ''
+            }));
             
             const fetchedDepositSettings = getSetting('deposit_gateway_settings', {
                 active_gateway: 'offline',
@@ -388,6 +405,106 @@ const Settings: React.FC = () => {
             setSavingDeposit(false);
         }
     };
+    
+    const handleSaveSecurityConfig = async () => {
+        if (!supabase) return;
+        setSavingSecurity(true);
+        setMessage(null);
+        try {
+             const { error } = await supabase
+                .from('app_settings')
+                .upsert({ key: 'security_config', value: securityConfig });
+             if (error) throw error;
+             setMessage({ type: 'success', text: 'Security settings saved successfully!' });
+             setTimeout(() => setMessage(null), 3000);
+        } catch (e: any) {
+            setMessage({ type: 'error', text: `Error saving security settings: ${e.message}` });
+            setTimeout(() => setMessage(null), 5000);
+        } finally {
+            setSavingSecurity(false);
+        }
+    };
+    
+    const handleCopySql = () => {
+        const sql = `
+-- 1. Create IP Log Table
+CREATE TABLE IF NOT EXISTS public.ip_logs (
+    id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    ip_address inet NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL
+);
+
+-- 2. Create IP Rate Limit Check Function
+CREATE OR REPLACE FUNCTION public.check_ip_rate_limit()
+RETURNS trigger AS $$
+DECLARE
+    ip_count integer;
+BEGIN
+    SELECT count(*) INTO ip_count
+    FROM public.ip_logs
+    WHERE ip_address = new.ip AND created_at >= now() - interval '24 hours';
+
+    IF ip_count >= 3 THEN
+        RAISE EXCEPTION 'IP_LIMIT_EXCEEDED';
+    END IF;
+
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 3. Create Trigger to Check IP on Sign Up
+DROP TRIGGER IF EXISTS on_auth_user_created_check_ip on auth.users;
+CREATE TRIGGER on_auth_user_created_check_ip
+    BEFORE INSERT ON auth.users
+    FOR EACH ROW EXECUTE PROCEDURE public.check_ip_rate_limit();
+
+-- 4. Create Function to Log IP after successful Sign Up
+CREATE OR REPLACE FUNCTION public.log_ip_after_signup()
+RETURNS trigger AS $$
+BEGIN
+    INSERT INTO public.ip_logs (ip_address)
+    VALUES (new.ip);
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 5. Create Trigger to Log IP after Sign Up
+DROP TRIGGER IF EXISTS on_auth_user_created_log_ip on auth.users;
+CREATE TRIGGER on_auth_user_created_log_ip
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE PROCEDURE public.log_ip_after_signup();
+
+-- 6. Create Device ID Check Function for Signup
+CREATE OR REPLACE FUNCTION public.check_device_id_on_signup()
+RETURNS trigger AS $$
+DECLARE
+    device_id_count integer;
+    device_id_from_meta text := new.raw_user_meta_data->>'device_id';
+BEGIN
+    IF device_id_from_meta IS NOT NULL THEN
+        SELECT count(*) INTO device_id_count
+        FROM auth.users
+        WHERE raw_user_meta_data->>'device_id' = device_id_from_meta;
+
+        IF device_id_count > 0 THEN
+            RAISE EXCEPTION 'DEVICE_ID_IN_USE';
+        END IF;
+    END IF;
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 7. Create Trigger to Check Device ID on Sign Up
+DROP TRIGGER IF EXISTS on_auth_user_created_check_device_id on auth.users;
+CREATE TRIGGER on_auth_user_created_check_device_id
+    BEFORE INSERT ON auth.users
+    FOR EACH ROW EXECUTE PROCEDURE public.check_device_id_on_signup();
+`.trim();
+        navigator.clipboard.writeText(sql);
+        setSqlCopied(true);
+        setTimeout(() => setSqlCopied(false), 2000);
+    };
+
 
     const handleAddMethod = async () => {
         if (!newMethodName || !newMethodNumber || !supabase) return;
@@ -500,29 +617,30 @@ const Settings: React.FC = () => {
 
     // Styles
     const headerStyle: React.CSSProperties = { fontSize: '2rem', marginBottom: '2rem' };
-    const containerStyle: React.CSSProperties = { backgroundColor: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.05)', marginBottom: '1.5rem' };
-    const labelStyle: React.CSSProperties = { fontWeight: 'bold', marginBottom: '0.5rem', display: 'block', fontSize: '1.2rem' };
+    const containerStyle: React.CSSProperties = { backgroundColor: 'var(--bg-card)', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 8px var(--shadow-color)', marginBottom: '1.5rem', border: '1px solid var(--border-color)' };
+    const labelStyle: React.CSSProperties = { fontWeight: 'bold', marginBottom: '0.5rem', display: 'block', fontSize: '1.2rem', color: 'var(--text-main)' };
     const buttonStyle: React.CSSProperties = { padding: '0.75rem 1.5rem', borderRadius: '5px', border: 'none', cursor: 'pointer', color: 'white', backgroundColor: '#48bb78', fontSize: '1.1rem', marginTop: '1rem' };
     const messageStyle: React.CSSProperties = { padding: '1rem', borderRadius: '5px', marginBottom: '1.5rem', textAlign: 'center', color: 'white' };
     const radioGroupStyle: React.CSSProperties = { display: 'flex', gap: '1.5rem', marginTop: '1rem', marginBottom: '1rem' };
     const radioLabelStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '1rem' };
     const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', whiteSpace: 'nowrap' };
-    const thStyle: React.CSSProperties = { padding: '1rem', textAlign: 'left', backgroundColor: '#f7fafc', borderBottom: '2px solid #edf2f7', color: '#4a5568' };
-    const videoTdStyle: React.CSSProperties = { padding: '1rem', borderBottom: '1px solid #edf2f7', whiteSpace: 'normal', wordBreak: 'break-all' };
+    const thStyle: React.CSSProperties = { padding: '1rem', textAlign: 'left', backgroundColor: 'var(--bg-main)', borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' };
+    const videoTdStyle: React.CSSProperties = { padding: '1rem', borderBottom: '1px solid var(--border-color)', whiteSpace: 'normal', wordBreak: 'break-all' };
     const modalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 };
-    const modalContentStyle: React.CSSProperties = { backgroundColor: 'white', padding: '2rem', borderRadius: '8px', width: '90%', maxWidth: '500px' };
-    const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' };
-    const tabContainerStyle: React.CSSProperties = { display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '2rem', overflowX: 'auto' };
-    const tabButtonStyle: React.CSSProperties = { padding: '1rem 1.5rem', border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem', color: '#4a5568', fontWeight: 500, borderBottom: '3px solid transparent', whiteSpace: 'nowrap' };
-    const activeTabButtonStyle: React.CSSProperties = { color: '#2d3748', fontWeight: 600, borderBottom: '3px solid #4299e1' };
-    const methodCardStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '0.5rem' };
-    const methodLogoStyle: React.CSSProperties = { width: '40px', height: '40px', objectFit: 'contain', marginRight: '1rem', borderRadius: '4px', backgroundColor: '#f7fafc' };
+    const modalContentStyle: React.CSSProperties = { backgroundColor: 'var(--bg-card)', padding: '2rem', borderRadius: '8px', width: '90%', maxWidth: '500px' };
+    const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box', backgroundColor: 'var(--input-bg)', color: 'var(--text-main)' };
+    const tabContainerStyle: React.CSSProperties = { display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '2rem', overflowX: 'auto' };
+    const tabButtonStyle: React.CSSProperties = { padding: '1rem 1.5rem', border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 500, borderBottom: '3px solid transparent', whiteSpace: 'nowrap' };
+    const activeTabButtonStyle: React.CSSProperties = { color: 'var(--primary-red)', fontWeight: 600, borderBottom: '3px solid var(--primary-red)' };
+    const methodCardStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '0.5rem' };
+    const methodLogoStyle: React.CSSProperties = { width: '40px', height: '40px', objectFit: 'contain', marginRight: '1rem', borderRadius: '4px', backgroundColor: 'var(--bg-main)' };
 
     const TABS: { id: Tab; label: string }[] = [
         { id: 'content', label: 'Content & Rules' },
         { id: 'setups', label: 'App Setups' },
         { id: 'deposit', label: 'Deposit' },
-        { id: 'videos', label: 'How to Play Videos' }
+        { id: 'videos', label: 'How to Play Videos' },
+        { id: 'security', label: 'Security' }
     ];
 
     return (
@@ -585,11 +703,11 @@ const Settings: React.FC = () => {
                             <label style={labelStyle}>General App Settings</label>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1rem' }}>
                                 <div>
-                                    <label style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#4a5568', display: 'block', marginBottom: '0.5rem'}}>App Title</label>
+                                    <label style={{fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.5rem'}}>App Title</label>
                                     <input type="text" value={appTitle} onChange={e => setAppTitle(e.target.value)} style={inputStyle} placeholder="e.g., Dream Ludo" />
                                 </div>
                                 <div>
-                                    <label style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#4a5568', display: 'block', marginBottom: '0.5rem'}}>Currency Symbol</label>
+                                    <label style={{fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.5rem'}}>Currency Symbol</label>
                                     <input type="text" value={currencySymbol} onChange={e => setCurrencySymbol(e.target.value)} style={inputStyle} placeholder="e.g., ৳, $, ₹" />
                                 </div>
                             </div>
@@ -603,52 +721,27 @@ const Settings: React.FC = () => {
                     <div style={containerStyle}>
                         <label style={labelStyle}>Global Group Chat</label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                            <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '60px', height: '34px' }}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={groupChatEnabled} 
-                                    onChange={(e) => setGroupChatEnabled(e.target.checked)}
-                                    style={{ opacity: 0, width: 0, height: 0 }}
-                                />
-                                <span className="slider round" style={{ 
-                                    position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, 
-                                    backgroundColor: groupChatEnabled ? '#48bb78' : '#ccc', transition: '.4s', borderRadius: '34px' 
-                                }}>
-                                    <span style={{ 
-                                        position: 'absolute', content: '""', height: '26px', width: '26px', left: groupChatEnabled ? '30px' : '4px', bottom: '4px', 
-                                        backgroundColor: 'white', transition: '.4s', borderRadius: '50%' 
-                                    }}></span>
-                                </span>
+                            <label className="switch">
+                                <input type="checkbox" checked={groupChatEnabled} onChange={(e) => setGroupChatEnabled(e.target.checked)} />
+                                <span className="slider"></span>
                             </label>
                             <span style={{fontWeight: 600, color: groupChatEnabled ? '#48bb78' : '#e53e3e'}}>{groupChatEnabled ? 'ENABLED' : 'DISABLED'}</span>
                         </div>
 
                         <div style={{marginBottom: '1rem'}}>
                             <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer'}}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={groupChatBlockLinks} 
-                                    onChange={(e) => setGroupChatBlockLinks(e.target.checked)}
-                                    style={{marginRight: '0.5rem'}}
-                                />
+                                <input type="checkbox" checked={groupChatBlockLinks} onChange={(e) => setGroupChatBlockLinks(e.target.checked)} style={{marginRight: '0.5rem'}} />
                                 <span style={{fontWeight: 500}}>Block Links</span>
                             </label>
-                            <p style={{color: '#666', fontSize: '0.85rem', margin: '0.2rem 0 0 1.5rem'}}>
+                            <p style={{color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0.2rem 0 0 1.5rem'}}>
                                 If enabled, users cannot send messages containing URLs.
                             </p>
                         </div>
 
                         <div>
                             <label style={{fontWeight: 500, display: 'block', marginBottom: '0.5rem'}}>Forbidden Words (Comma Separated)</label>
-                            <textarea 
-                                value={groupChatBannedWords}
-                                onChange={(e) => setGroupChatBannedWords(e.target.value)}
-                                style={{width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc', minHeight: '80px'}}
-                                placeholder="badword1, badword2, spam"
-                            />
-                            <p style={{color: '#666', fontSize: '0.85rem', marginTop: '0.2rem'}}>
-                                Messages containing these words will be blocked.
-                            </p>
+                            <textarea value={groupChatBannedWords} onChange={(e) => setGroupChatBannedWords(e.target.value)} style={{...inputStyle, minHeight: '80px'}} placeholder="badword1, badword2, spam" />
+                            <p style={{color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.2rem'}}> Messages containing these words will be blocked. </p>
                         </div>
                         
                         <button onClick={handleSaveGroupChatSettings} style={buttonStyle} disabled={savingGroupChat || loading}>
@@ -659,7 +752,7 @@ const Settings: React.FC = () => {
                     {/* Admin Status */}
                     <div style={containerStyle}>
                         <label style={labelStyle}>Admin Status</label>
-                        <p style={{ color: '#666', fontSize: '0.9rem' }}>This status is displayed to users in the app header.</p>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>This status is displayed to users in the app header.</p>
                         <div style={radioGroupStyle}>
                             <label style={radioLabelStyle}><input type="radio" name="adminStatus" value="online" checked={adminStatus === 'online'} onChange={() => setAdminStatus('online')} /> Online</label>
                             <label style={radioLabelStyle}><input type="radio" name="adminStatus" value="offline" checked={adminStatus === 'offline'} onChange={() => setAdminStatus('offline')} /> Offline</label>
@@ -673,7 +766,7 @@ const Settings: React.FC = () => {
                     <div style={containerStyle}>
                         <form onSubmit={handleSaveCommission}>
                             <label style={labelStyle}>Admin Commission (%)</label>
-                            <p style={{ color: '#666', fontSize: '0.9rem' }}>Percentage deducted from the prize pool of every match.</p>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Percentage deducted from the prize pool of every match.</p>
                             <input type="number" value={commission} onChange={e => setCommission(Number(e.target.value))} style={inputStyle} min="0" max="100" step="0.1" />
                             <button type="submit" style={buttonStyle} disabled={savingCommission || loading}>
                                 {savingCommission ? 'Saving...' : 'Update Commission'}
@@ -685,19 +778,19 @@ const Settings: React.FC = () => {
                     <div style={containerStyle}>
                         <form onSubmit={handleSaveReferral}>
                             <label style={labelStyle}>Referral Settings ({currencySymbol})</label>
-                            <p style={{ color: '#666', fontSize: '0.9rem' }}>Set the bonus amounts for the referral program.</p>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Set the bonus amounts for the referral program.</p>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
-                                    <label style={{fontSize: '0.85rem', color: '#4a5568', fontWeight: 'bold'}}>Referrer Bonus (One-time)</label>
+                                    <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 'bold'}}>Referrer Bonus (One-time)</label>
                                     <input type="number" value={referralBonus} onChange={e => setReferralBonus(Number(e.target.value))} style={inputStyle} min="0" />
                                 </div>
                                 <div>
-                                    <label style={{fontSize: '0.85rem', color: '#4a5568', fontWeight: 'bold'}}>Referee (New User) Bonus</label>
+                                    <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 'bold'}}>Referee (New User) Bonus</label>
                                     <input type="number" value={refereeBonus} onChange={e => setRefereeBonus(Number(e.target.value))} style={inputStyle} min="0" />
                                 </div>
                                 <div style={{gridColumn: '1 / -1'}}>
-                                     <label style={{fontSize: '0.85rem', color: '#4a5568', fontWeight: 'bold'}}>Per-Match Commission to Referrer</label>
-                                     <p style={{fontSize: '0.8rem', color: '#666', marginTop: 0}}>Amount the referrer gets every time their referred user wins a match.</p>
+                                     <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 'bold'}}>Per-Match Commission to Referrer</label>
+                                     <p style={{fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 0}}>Amount the referrer gets every time their referred user wins a match.</p>
                                      <input type="number" value={referralMatchBonus} onChange={e => setReferralMatchBonus(Number(e.target.value))} style={inputStyle} min="0" />
                                 </div>
                             </div>
@@ -727,28 +820,23 @@ const Settings: React.FC = () => {
                                 
                                 {depositSettings.active_gateway === 'offline' && (
                                     <>
-                                        <hr style={{border: 'none', borderTop: '1px solid #e2e8f0'}} />
+                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
                                         <div>
                                             <h3 style={{marginTop: 0}}>Offline Payment Methods</h3>
-                                            <p style={{color: '#666', fontSize: '0.9rem'}}>Manage the payment methods (e.g., Bkash, Nagad) displayed to users for manual deposits.</p>
+                                            <p style={{color: 'var(--text-secondary)', fontSize: '0.9rem'}}>Manage the payment methods (e.g., Bkash, Nagad) displayed to users for manual deposits.</p>
                                             
-                                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1.5rem', backgroundColor: '#f7fafc', padding: '1rem', borderRadius: '8px'}}>
+                                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1.5rem', backgroundColor: 'var(--bg-main)', padding: '1rem', borderRadius: '8px'}}>
                                                 <div>
-                                                    <label style={{fontSize: '0.85rem', color: '#4a5568'}}>Method Name</label>
+                                                    <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Method Name</label>
                                                     <input type="text" placeholder="e.g. Bkash Personal" value={newMethodName} onChange={e => setNewMethodName(e.target.value)} style={inputStyle} />
                                                 </div>
                                                 <div>
-                                                    <label style={{fontSize: '0.85rem', color: '#4a5568'}}>Wallet Number</label>
+                                                    <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Wallet Number</label>
                                                     <input type="text" placeholder="e.g. 017..." value={newMethodNumber} onChange={e => setNewMethodNumber(e.target.value)} style={inputStyle} />
                                                 </div>
                                                 <div>
-                                                     <label style={{fontSize: '0.85rem', color: '#4a5568'}}>Method Logo</label>
-                                                     <input 
-                                                        type="file" 
-                                                        accept="image/*" 
-                                                        onChange={e => setNewMethodLogoFile(e.target.files ? e.target.files[0] : null)} 
-                                                        style={{border: '1px solid #ccc', padding: '4px', borderRadius: '4px', backgroundColor: 'white', width: '100%'}} 
-                                                     />
+                                                     <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Method Logo</label>
+                                                     <input type="file" accept="image/*" onChange={e => setNewMethodLogoFile(e.target.files ? e.target.files[0] : null)} style={{border: '1px solid var(--border-color)', padding: '4px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', width: '100%', color: 'var(--text-main)'}} />
                                                 </div>
                                                 <button type="button" onClick={handleAddMethod} disabled={uploadingLogo} style={{...buttonStyle, marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
                                                     {uploadingLogo ? 'Uploading...' : <><div dangerouslySetInnerHTML={{__html: PlusIconSVG()}} /> Add</>}
@@ -766,7 +854,7 @@ const Settings: React.FC = () => {
                                                             )}
                                                             <div>
                                                                 <div style={{fontWeight: 'bold'}}>{method.name}</div>
-                                                                <div style={{fontFamily: 'monospace', color: '#666'}}>{method.number}</div>
+                                                                <div style={{fontFamily: 'monospace', color: 'var(--text-secondary)'}}>{method.number}</div>
                                                             </div>
                                                         </div>
                                                         <button type="button" onClick={() => handleDeleteMethod(method.id)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#e53e3e'}}>
@@ -781,12 +869,7 @@ const Settings: React.FC = () => {
 
                                             <div style={{marginTop: '1.5rem'}}>
                                                 <label style={{...labelStyle, fontSize: '1rem'}}>General Instructions (Optional)</label>
-                                                <textarea 
-                                                    value={depositSettings.offline.instructions} 
-                                                    onChange={e => setDepositSettings(s => ({...s, offline: {...s.offline, instructions: e.target.value}}))} 
-                                                    style={{width: '100%', minHeight: '80px', padding: '0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.95rem'}} 
-                                                    placeholder="Any extra instructions for the user..."
-                                                />
+                                                <textarea value={depositSettings.offline.instructions} onChange={e => setDepositSettings(s => ({...s, offline: {...s.offline, instructions: e.target.value}}))} style={{...inputStyle, minHeight: '80px'}} placeholder="Any extra instructions for the user..." />
                                             </div>
                                         </div>
                                     </>
@@ -794,7 +877,7 @@ const Settings: React.FC = () => {
                                 
                                 {depositSettings.active_gateway === 'uddoktapay' && (
                                     <>
-                                        <hr style={{border: 'none', borderTop: '1px solid #e2e8f0'}} />
+                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
                                         <div>
                                             <h3 style={{marginTop: 0}}>UddoktaPay Settings</h3>
                                             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
@@ -807,7 +890,7 @@ const Settings: React.FC = () => {
                                 
                                 {depositSettings.active_gateway === 'paytm' && (
                                     <>
-                                        <hr style={{border: 'none', borderTop: '1px solid #e2e8f0'}} />
+                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
                                         <div>
                                             <h3 style={{marginTop: 0}}>Paytm Settings</h3>
                                             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
@@ -815,11 +898,7 @@ const Settings: React.FC = () => {
                                                 <div><label style={{...labelStyle, fontSize: '1rem'}}>Merchant Key</label><input type="text" value={depositSettings.paytm.merchant_key} onChange={e => setDepositSettings(s => ({...s, paytm: {...s.paytm, merchant_key: e.target.value}}))} style={inputStyle} /></div>
                                                 <div>
                                                     <label style={{...labelStyle, fontSize: '1rem'}}>Website</label>
-                                                    <select 
-                                                        value={depositSettings.paytm.website} 
-                                                        onChange={e => setDepositSettings(s => ({...s, paytm: {...s.paytm, website: e.target.value}}))} 
-                                                        style={inputStyle}
-                                                    >
+                                                    <select value={depositSettings.paytm.website} onChange={e => setDepositSettings(s => ({...s, paytm: {...s.paytm, website: e.target.value}}))} style={inputStyle} >
                                                         <option value="WEBSTAGING">Testing (WEBSTAGING)</option>
                                                         <option value="DEFAULT">Production (DEFAULT)</option>
                                                     </select>
@@ -831,7 +910,7 @@ const Settings: React.FC = () => {
 
                                 {depositSettings.active_gateway === 'razorpay' && (
                                     <>
-                                        <hr style={{border: 'none', borderTop: '1px solid #e2e8f0'}} />
+                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
                                         <div>
                                             <h3 style={{marginTop: 0}}>Razorpay Settings</h3>
                                             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
@@ -880,6 +959,75 @@ const Settings: React.FC = () => {
                 </div>
             )}
             
+            {activeTab === 'security' && (
+                <div>
+                    <div className="security-grid">
+                        <div className="security-card">
+                            <div className="security-card-header">
+                                <h3>Incognito Mode Block</h3>
+                                <label className="switch">
+                                    <input type="checkbox" checked={securityConfig.incognitoBlockEnabled} onChange={e => setSecurityConfig(s => ({...s, incognitoBlockEnabled: e.target.checked}))} />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                            <p>Prevent users from signing up or logging in from a private/incognito browser window.</p>
+                        </div>
+                         <div className="security-card">
+                            <div className="security-card-header">
+                                <h3>VPN / Proxy Detection</h3>
+                                <label className="switch">
+                                    <input type="checkbox" checked={securityConfig.vpnBlockEnabled} onChange={e => setSecurityConfig(s => ({...s, vpnBlockEnabled: e.target.checked}))} />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                            <p>Block signups from users on a VPN, proxy, or hosting network. Requires a free API key from a service like ipinfo.io.</p>
+                            <div className="security-card-footer">
+                                <input 
+                                    type="text" 
+                                    placeholder="Enter ipinfo.io API Key" 
+                                    style={inputStyle}
+                                    value={securityConfig.vpnApiKey || ''}
+                                    onChange={e => setSecurityConfig(s => ({...s, vpnApiKey: e.target.value}))}
+                                />
+                            </div>
+                        </div>
+                        <div className="security-card">
+                            <div className="security-card-header">
+                                <h3>IP-based Signup Limit</h3>
+                                <label className="switch">
+                                    <input type="checkbox" checked={securityConfig.ipLimitEnabled} onChange={e => setSecurityConfig(s => ({...s, ipLimitEnabled: e.target.checked}))} />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                            <p>Limit new account creations to 3 per IP address every 24 hours. Requires backend setup.</p>
+                        </div>
+
+                        <div className="security-card">
+                            <div className="security-card-header">
+                                <h3>One Account Per Device</h3>
+                                <label className="switch">
+                                    <input type="checkbox" checked={securityConfig.deviceLockEnabled} onChange={e => setSecurityConfig(s => ({...s, deviceLockEnabled: e.target.checked}))} />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                            <p>Prevent users from creating more than one account on the same device using browser fingerprinting. Requires backend setup.</p>
+                        </div>
+                    </div>
+                    
+                    <div style={{ ...containerStyle, marginTop: '1.5rem', background: 'var(--bg-main)' }}>
+                        <h3 style={{ marginTop: 0 }}>Backend Setup</h3>
+                        <p>To enable IP and Device limits, you must run a script in your Supabase SQL Editor. Click the button below to generate the required code.</p>
+                        <button style={{ ...buttonStyle, backgroundColor: '#3182ce', marginTop: 0 }} onClick={() => setShowSqlModal(true)}>
+                            Generate SQL
+                        </button>
+                    </div>
+                    
+                     <button onClick={handleSaveSecurityConfig} style={{...buttonStyle, width: '100%'}} disabled={savingSecurity || loading}>
+                        {savingSecurity ? 'Saving...' : 'Save Security Settings'}
+                    </button>
+                </div>
+            )}
+            
             {isVideoModalOpen && (
                 <div style={modalOverlayStyle}>
                     <div style={modalContentStyle} className="admin-modal-content">
@@ -898,6 +1046,96 @@ const Settings: React.FC = () => {
                                 <button type="submit" style={{ ...buttonStyle, backgroundColor: '#48bb78' }}>Save</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            
+            {showSqlModal && (
+                <div style={modalOverlayStyle} onClick={() => setShowSqlModal(false)}>
+                    <div style={{ ...modalContentStyle, maxWidth: '700px' }} onClick={e => e.stopPropagation()}>
+                        <h2 style={{ marginTop: 0 }}>Backend Security Setup</h2>
+                        <p>Copy and run this SQL code in your Supabase SQL Editor to enable IP and Device ID checks.</p>
+                        <div style={{ backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: '1rem', borderRadius: '6px', fontFamily: 'monospace', fontSize: '0.85rem', overflowX: 'auto', marginBottom: '1.5rem', position: 'relative', maxHeight: '40vh' }}>
+                             <button onClick={handleCopySql} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '4px', cursor: 'pointer', padding: '4px', color: 'white' }} title="Copy SQL">
+                                <div dangerouslySetInnerHTML={{ __html: CopyIconSVG(sqlCopied) }} />
+                            </button>
+                            <pre style={{ margin: 0 }}>{`
+-- 1. Create IP Log Table
+CREATE TABLE IF NOT EXISTS public.ip_logs (
+    id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    ip_address inet NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL
+);
+
+-- 2. Create IP Rate Limit Check Function
+CREATE OR REPLACE FUNCTION public.check_ip_rate_limit()
+RETURNS trigger AS $$
+DECLARE
+    ip_count integer;
+BEGIN
+    SELECT count(*) INTO ip_count
+    FROM public.ip_logs
+    WHERE ip_address = new.ip AND created_at >= now() - interval '24 hours';
+
+    IF ip_count >= 3 THEN
+        RAISE EXCEPTION 'IP_LIMIT_EXCEEDED';
+    END IF;
+
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 3. Create Trigger to Check IP on Sign Up
+DROP TRIGGER IF EXISTS on_auth_user_created_check_ip on auth.users;
+CREATE TRIGGER on_auth_user_created_check_ip
+    BEFORE INSERT ON auth.users
+    FOR EACH ROW EXECUTE PROCEDURE public.check_ip_rate_limit();
+
+-- 4. Create Function to Log IP after successful Sign Up
+CREATE OR REPLACE FUNCTION public.log_ip_after_signup()
+RETURNS trigger AS $$
+BEGIN
+    INSERT INTO public.ip_logs (ip_address)
+    VALUES (new.ip);
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 5. Create Trigger to Log IP after Sign Up
+DROP TRIGGER IF EXISTS on_auth_user_created_log_ip on auth.users;
+CREATE TRIGGER on_auth_user_created_log_ip
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE PROCEDURE public.log_ip_after_signup();
+
+-- 6. Create Device ID Check Function for Signup
+CREATE OR REPLACE FUNCTION public.check_device_id_on_signup()
+RETURNS trigger AS $$
+DECLARE
+    device_id_count integer;
+    device_id_from_meta text := new.raw_user_meta_data->>'device_id';
+BEGIN
+    IF device_id_from_meta IS NOT NULL THEN
+        SELECT count(*) INTO device_id_count
+        FROM auth.users
+        WHERE raw_user_meta_data->>'device_id' = device_id_from_meta;
+
+        IF device_id_count > 0 THEN
+            RAISE EXCEPTION 'DEVICE_ID_IN_USE';
+        END IF;
+    END IF;
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 7. Create Trigger to Check Device ID on Sign Up
+DROP TRIGGER IF EXISTS on_auth_user_created_check_device_id on auth.users;
+CREATE TRIGGER on_auth_user_created_check_device_id
+    BEFORE INSERT ON auth.users
+    FOR EACH ROW EXECUTE PROCEDURE public.check_device_id_on_signup();`}</pre>
+                        </div>
+                         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button onClick={() => setShowSqlModal(false)} style={{ ...buttonStyle, backgroundColor: '#718096', marginTop: 0 }}>Close</button>
+                        </div>
                     </div>
                 </div>
             )}
