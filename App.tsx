@@ -29,6 +29,7 @@ import ReferHistory from './components/ReferHistory';
 import ReferLeaderboard from './components/ReferLeaderboard';
 import SupportChatWidget from './components/SupportChatWidget';
 import GlobalChat from './components/GlobalChat';
+
 import { GameStatus, Tournament, Notification, Profile as ProfileType } from './types';
 import { themes, ThemeName } from './themes';
 import { supabase } from './utils/supabase';
@@ -60,6 +61,7 @@ function App() {
   const [session, setSession] = useState<any | null>(null);
   const [currentView, setCurrentView] = useState<View>('tournaments');
   const [isAdmin, setIsAdmin] = useState(false);
+  // isAdminView is now derived effectively from currentView === 'admin'
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [adminStatus, setAdminStatus] = useState<'online' | 'offline'>('offline');
@@ -81,7 +83,7 @@ function App() {
   
   // Loading state for initial session check
   const [isSessionLoading, setIsSessionLoading] = useState(true);
-  
+
   const playerName = session?.user?.user_metadata?.full_name || session?.user?.email || 'Player';
   const playerId = session?.user?.id || null;
   const sessionToken = session?.access_token || null;
@@ -497,9 +499,13 @@ function App() {
       setView('admin');
   }
 
+  const currentTheme = themes[theme];
+
   const appStyle: React.CSSProperties = {
     minHeight: '100vh',
     transition: 'background-color 0.3s ease',
+    ...currentTheme,
+    backgroundColor: 'var(--app-background)',
   };
 
   const renderCurrentView = () => {
@@ -695,6 +701,13 @@ function App() {
             {session && (
                 <>
                     <SupportChatWidget />
+                    <div style={{ zIndex: 997 }}>
+                         {/* The group chat widget component itself manages its visibility via props or internal state, 
+                             but placing it here ensures it's available globally when logged in.
+                             Pass isEnabled check internally in the component.
+                          */}
+                         <React.Fragment /> 
+                    </div>
                 </>
             )}
         </>
