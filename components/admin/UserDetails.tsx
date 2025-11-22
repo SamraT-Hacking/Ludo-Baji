@@ -62,6 +62,7 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onBack }) => {
     const [balanceAction, setBalanceAction] = useState<'credit' | 'debit'>('credit');
     const [balanceAmount, setBalanceAmount] = useState('');
     const [balanceNote, setBalanceNote] = useState('');
+    const [debitSource, setDebitSource] = useState<'deposit' | 'winnings'>('winnings'); // New state for debit source
     const [processingBalance, setProcessingBalance] = useState(false);
 
     const fetchData = async () => {
@@ -162,6 +163,7 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onBack }) => {
         setBalanceAction(action);
         setBalanceAmount('');
         setBalanceNote('');
+        setDebitSource('winnings'); // Reset to default
         setIsBalanceModalOpen(true);
     };
 
@@ -175,9 +177,16 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onBack }) => {
             return;
         }
 
-        if (balanceAction === 'debit' && amount > profile.winnings_balance) {
-            alert(`Insufficient winnings balance. User has ${currencySymbol}${profile.winnings_balance.toFixed(2)}.`);
-            return;
+        // Check sufficient balance for debit
+        if (balanceAction === 'debit') {
+            if (debitSource === 'winnings' && amount > profile.winnings_balance) {
+                alert(`Insufficient winnings balance. User has ${currencySymbol}${profile.winnings_balance.toFixed(2)}.`);
+                return;
+            }
+            if (debitSource === 'deposit' && amount > profile.deposit_balance) {
+                alert(`Insufficient deposit balance. User has ${currencySymbol}${profile.deposit_balance.toFixed(2)}.`);
+                return;
+            }
         }
 
         setProcessingBalance(true);
@@ -204,10 +213,22 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onBack }) => {
                 if (txError) throw txError;
 
             } else {
-                // Update Profile: Deduct from Winnings Balance
+                // DEBIT LOGIC
+                let updateData = {};
+                let descSource = '';
+
+                if (debitSource === 'winnings') {
+                    updateData = { winnings_balance: Number(profile.winnings_balance) - amount };
+                    descSource = '(Winning Balance)';
+                } else {
+                    updateData = { deposit_balance: Number(profile.deposit_balance) - amount };
+                    descSource = '(Deposit Balance)';
+                }
+
+                // Update Profile: Deduct
                 const { error: profileError } = await supabase
                     .from('profiles')
-                    .update({ winnings_balance: Number(profile.winnings_balance) - amount })
+                    .update(updateData)
                     .eq('id', userId);
                 
                 if (profileError) throw profileError;
@@ -217,10 +238,10 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onBack }) => {
                     .from('transactions')
                     .insert({
                         user_id: userId,
-                        amount: -amount, // Negative for deduction display in some views, though schema tracks absolute usually, standard practice for withdrawal types is often negative representation in UI
+                        amount: -amount, 
                         type: 'WITHDRAWAL',
                         status: 'COMPLETED',
-                        description: `Debit Money From Admin ${balanceNote ? '- ' + balanceNote : ''}`
+                        description: `Debit Money From Admin ${descSource} ${balanceNote ? '- ' + balanceNote : ''}`
                     });
                 if (txError) throw txError;
             }
@@ -459,7 +480,7 @@ $$ LANGUAGE plpgsql;
                         </button>
                         <button onClick={() => openBalanceModal('debit')} style={btnStyle('#f56565')}>
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Debit Winnings
+                            Debit Balance
                         </button>
                     </div>
                 </DetailCard>
@@ -587,9 +608,40 @@ $$ LANGUAGE plpgsql;
                         <p style={{ textAlign: 'center', fontSize: '0.9rem', color: '#666', marginBottom: '1.5rem' }}>
                             {balanceAction === 'credit' 
                                 ? 'Add funds to the user\'s DEPOSIT balance.' 
-                                : 'Deduct funds from the user\'s WINNINGS balance.'}
+                                : 'Deduct funds from the user\'s account.'}
                         </p>
                         <form onSubmit={handleBalanceSubmit}>
+                            
+                            {balanceAction === 'debit' && (
+                                <div style={{marginBottom: '1rem'}}>
+                                    <label style={labelStyle}>Debit From</label>
+                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '0.9rem' }}>
+                                            <input 
+                                                type="radio" 
+                                                name="debitSource" 
+                                                value="winnings"
+                                                checked={debitSource === 'winnings'}
+                                                onChange={() => setDebitSource('winnings')}
+                                                style={{ marginRight: '0.5rem' }}
+                                            />
+                                            Winning Balance ({currencySymbol}{profile.winnings_balance?.toFixed(2)})
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '0.9rem' }}>
+                                            <input 
+                                                type="radio" 
+                                                name="debitSource" 
+                                                value="deposit"
+                                                checked={debitSource === 'deposit'}
+                                                onChange={() => setDebitSource('deposit')}
+                                                style={{ marginRight: '0.5rem' }}
+                                            />
+                                            Deposit Balance ({currencySymbol}{profile.deposit_balance?.toFixed(2)})
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
                             <div>
                                 <label style={labelStyle}>Amount ({currencySymbol})</label>
                                 <input 
