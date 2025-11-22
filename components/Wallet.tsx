@@ -16,6 +16,12 @@ interface OfflineMethod {
     logo_url?: string; // Added logo support
 }
 
+interface WithdrawalMethod {
+    id: string;
+    name: string;
+    logo_url?: string;
+}
+
 interface DepositGatewaySettings {
     active_gateway: 'offline' | 'uddoktapay' | 'paytm' | 'razorpay';
     uddoktapay: { api_key: string; api_url: string; };
@@ -39,9 +45,10 @@ const WithdrawalModal: React.FC<{
     onSuccess: () => void;
     currencySymbol: string;
     limits: FinancialLimits;
-}> = ({ onClose, winningsBalance, onSuccess, currencySymbol, limits }) => {
+    methods: WithdrawalMethod[];
+}> = ({ onClose, winningsBalance, onSuccess, currencySymbol, limits, methods }) => {
     const { t } = useLanguage();
-    const [method, setMethod] = useState('bKash');
+    const [method, setMethod] = useState(methods.length > 0 ? methods[0].name : 'bKash');
     const [accountNumber, setAccountNumber] = useState('');
     const [amount, setAmount] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -102,9 +109,17 @@ const WithdrawalModal: React.FC<{
                             onChange={e => setMethod(e.target.value)}
                             className="profile-input"
                         >
-                            <option value="bKash">bKash</option>
-                            <option value="Nagad">Nagad</option>
-                            <option value="Rocket">Rocket</option>
+                            {methods.length > 0 ? (
+                                methods.map(m => (
+                                    <option key={m.id} value={m.name}>{m.name}</option>
+                                ))
+                            ) : (
+                                <>
+                                    <option value="bKash">bKash</option>
+                                    <option value="Nagad">Nagad</option>
+                                    <option value="Rocket">Rocket</option>
+                                </>
+                            )}
                         </select>
                     </div>
                      <div className="profile-input-group">
@@ -462,6 +477,7 @@ const Wallet: React.FC = () => {
     const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
     const [depositSettings, setDepositSettings] = useState<DepositGatewaySettings | null>(null);
     const [limits, setLimits] = useState<FinancialLimits>({ min_deposit: 30, min_withdraw: 100, withdraw_fee: 5 });
+    const [withdrawalMethods, setWithdrawalMethods] = useState<WithdrawalMethod[]>([]);
     
     const { currencySymbol } = useContext(AppConfigContext);
     
@@ -475,12 +491,14 @@ const Wallet: React.FC = () => {
                 { data: profileData, error: profileError },
                 { data: transactionsData, error: transactionsError },
                 { data: settingsData, error: settingsError },
-                { data: limitsData, error: limitsError }
+                { data: limitsData, error: limitsError },
+                { data: withdrawData, error: withdrawError }
             ] = await Promise.all([
                 supabase.from('profiles').select('*').eq('id', user.id).single(),
                 supabase.from('transactions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
                 supabase.from('app_settings').select('value').eq('key', 'deposit_gateway_settings').single(),
-                supabase.from('app_settings').select('value').eq('key', 'financial_limits').single()
+                supabase.from('app_settings').select('value').eq('key', 'financial_limits').single(),
+                supabase.from('app_settings').select('value').eq('key', 'withdrawal_methods').single()
             ]);
 
             if (profileError) throw profileError;
@@ -493,6 +511,9 @@ const Wallet: React.FC = () => {
             
             if (limitsData && limitsData.value) {
                 setLimits(limitsData.value as FinancialLimits);
+            }
+            if (withdrawData && withdrawData.value) {
+                setWithdrawalMethods(withdrawData.value.methods || []);
             }
 
         } catch (e: any) {
@@ -587,6 +608,7 @@ const Wallet: React.FC = () => {
                     onSuccess={() => handleActionSuccess('Withdrawal request submitted successfully.')}
                     currencySymbol={currencySymbol}
                     limits={limits}
+                    methods={withdrawalMethods}
                 />
             )}
             {isDepositModalOpen && (

@@ -14,6 +14,12 @@ interface OfflineMethod {
     logo_url?: string; // New field for image URL
 }
 
+interface WithdrawalMethod {
+    id: string;
+    name: string;
+    logo_url?: string;
+}
+
 interface DepositGatewaySettings {
     active_gateway: 'offline' | 'uddoktapay' | 'paytm' | 'razorpay';
     uddoktapay: { api_key: string; api_url: string; };
@@ -172,6 +178,12 @@ const Settings: React.FC = () => {
     const [newMethodLogoFile, setNewMethodLogoFile] = useState<File | null>(null);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     
+    // Withdrawal Methods State
+    const [withdrawalMethods, setWithdrawalMethods] = useState<WithdrawalMethod[]>([]);
+    const [newWithdrawName, setNewWithdrawName] = useState('');
+    const [newWithdrawLogo, setNewWithdrawLogo] = useState<File | null>(null);
+    const [savingWithdrawMethods, setSavingWithdrawMethods] = useState(false);
+
     const [securitySettings, setSecuritySettings] = useState({ enabled: false, apiKey: '' });
     const [savingSecurity, setSavingSecurity] = useState(false);
 
@@ -258,6 +270,9 @@ const Settings: React.FC = () => {
                 fetchedDepositSettings.offline.methods = [];
             }
             setDepositSettings(fetchedDepositSettings);
+            
+            const withdrawalConfig = getSetting('withdrawal_methods', { methods: [] });
+            setWithdrawalMethods(withdrawalConfig.methods || []);
 
             const fetchedSecuritySettings = getSetting('fingerprintjs_settings', { enabled: false, apiKey: '' });
             setSecuritySettings(fetchedSecuritySettings);
@@ -507,6 +522,55 @@ const Settings: React.FC = () => {
                 methods: (prev.offline.methods || []).filter(m => m.id !== id)
             }
         }));
+    };
+    
+    // Withdrawal Handlers
+    const handleAddWithdrawMethod = async () => {
+        if (!newWithdrawName || !supabase) return;
+        setUploadingLogo(true);
+        let logoUrl = '';
+        if (newWithdrawLogo) {
+             try {
+                const fileExt = newWithdrawLogo.name.split('.').pop();
+                const fileName = `withdraw_${Date.now()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage.from('payment-methods').upload(fileName, newWithdrawLogo);
+                if (uploadError) throw uploadError;
+                const { data } = supabase.storage.from('payment-methods').getPublicUrl(fileName);
+                logoUrl = data.publicUrl;
+            } catch (e) {
+                console.error(e);
+                setUploadingLogo(false);
+                return;
+            }
+        }
+        setWithdrawalMethods(prev => [...prev, { id: Date.now().toString(), name: newWithdrawName, logo_url: logoUrl }]);
+        setNewWithdrawName('');
+        setNewWithdrawLogo(null);
+        setUploadingLogo(false);
+    };
+
+    const handleDeleteWithdrawMethod = (id: string) => {
+        setWithdrawalMethods(prev => prev.filter(m => m.id !== id));
+    };
+
+    const handleSaveWithdrawMethods = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!supabase) return;
+        setSavingWithdrawMethods(true);
+        setMessage(null);
+        try {
+            const { error } = await supabase.from('app_settings').upsert({
+                key: 'withdrawal_methods',
+                value: { methods: withdrawalMethods }
+            });
+            if (error) throw error;
+            setMessage({ type: 'success', text: 'Withdrawal methods updated!' });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (e: any) {
+            setMessage({ type: 'error', text: `Error: ${e.message}` });
+        } finally {
+            setSavingWithdrawMethods(false);
+        }
     };
 
 
@@ -1106,6 +1170,59 @@ const Settings: React.FC = () => {
                             </div>
                             <button type="submit" style={buttonStyle} disabled={savingFinancials}>
                                 {savingFinancials ? 'Saving...' : 'Update Limits'}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Withdrawal Methods */}
+                    <div style={containerStyle}>
+                        <form onSubmit={handleSaveWithdrawMethods}>
+                            <label style={labelStyle}>Withdrawal Methods</label>
+                            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                                Define the withdrawal options available to users (e.g., Bkash, Nagad).
+                            </p>
+                            
+                            <div style={{display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1.5rem', backgroundColor: 'var(--bg-main)', padding: '1rem', borderRadius: '8px'}}>
+                                <div>
+                                    <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Method Name</label>
+                                    <input type="text" placeholder="e.g. Bkash" value={newWithdrawName} onChange={e => setNewWithdrawName(e.target.value)} style={inputStyle} />
+                                </div>
+                                <div>
+                                     <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Logo (Optional)</label>
+                                     <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        onChange={e => setNewWithdrawLogo(e.target.files ? e.target.files[0] : null)} 
+                                        style={{border: '1px solid var(--border-color)', padding: '4px', borderRadius: '4px', backgroundColor: 'var(--input-bg)', width: '100%', color: 'var(--text-main)'}} 
+                                     />
+                                </div>
+                                <button type="button" onClick={handleAddWithdrawMethod} disabled={uploadingLogo} style={{...buttonStyle, marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                                    {uploadingLogo ? 'Uploading...' : <><div dangerouslySetInnerHTML={{__html: PlusIconSVG()}} /> Add</>}
+                                </button>
+                            </div>
+
+                            <div>
+                                {withdrawalMethods.map(method => (
+                                    <div key={method.id} style={methodCardStyle}>
+                                        <div style={{display: 'flex', alignItems: 'center'}}>
+                                            {method.logo_url ? (
+                                                <img src={method.logo_url} alt={method.name} style={methodLogoStyle} />
+                                            ) : (
+                                                <div style={{...methodLogoStyle, backgroundColor: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '10px'}}>NO LOGO</div>
+                                            )}
+                                            <div style={{fontWeight: 'bold'}}>{method.name}</div>
+                                        </div>
+                                        <button type="button" onClick={() => handleDeleteWithdrawMethod(method.id)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#e53e3e'}}>
+                                            <div dangerouslySetInnerHTML={{__html: TrashIconSVG()}} />
+                                        </button>
+                                    </div>
+                                ))}
+                                {withdrawalMethods.length === 0 && (
+                                    <p style={{color: '#999', textAlign: 'center', fontStyle: 'italic'}}>No withdrawal methods added.</p>
+                                )}
+                            </div>
+                            <button type="submit" style={buttonStyle} disabled={savingWithdrawMethods || loading}>
+                                {savingWithdrawMethods ? 'Saving...' : 'Save Withdrawal Methods'}
                             </button>
                         </form>
                     </div>
