@@ -332,6 +332,16 @@ function App() {
       setTheme(nextTheme === 'dark' ? 'modern' : 'classic'); 
   }, [theme]);
 
+  // Apply Theme Variables to CSS
+  useEffect(() => {
+    const themeVariables = themes[theme];
+    if (themeVariables) {
+      Object.entries(themeVariables).forEach(([key, value]) => {
+        document.documentElement.style.setProperty(key, value);
+      });
+    }
+  }, [theme]);
+
   // Use Game Hook
   const { gameState, connectionStatus, error: gameError, startGame, rollDice, movePiece, leaveGame, sendChatMessage } = useGameServer(gameCode, session?.access_token);
 
