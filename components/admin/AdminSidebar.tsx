@@ -5,7 +5,7 @@ import {
     UserGroupIconSVG, TotalMatchesIconSVG, WalletIconSVG, 
     AdminPendingIconSVG, TransactionHistoryIconSVG, LeaderboardIconSVG,
     SupportChatIconSVG, FAQIconSVG, AdminPanelIconSVG, AdminCalendarIconSVG,
-    GlobalChatIconSVG, SunIconSVG, MoonIconSVG, PlayIconSVG
+    GlobalChatIconSVG, SunIconSVG, MoonIconSVG
 } from '../../assets/icons';
 
 // Globe Icon for Languages
@@ -147,12 +147,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentView, setView, onExi
         { view: 'withdrawals', label: 'Withdrawals', icon: AdminPendingIconSVG(), color: '#ed8936' },
         { view: 'transactions', label: 'History', icon: TransactionHistoryIconSVG(), color: '#9f7aea' },
         { view: 'notifications', label: 'Notify', icon: LeaderboardIconSVG(), color: '#38b2ac' },
-        { view: 'popups', label: 'Popups', icon: MegaphoneIconSVG(), color: '#e53e3e' }, // New
-        { view: 'chat', label: 'Game Chat', icon: SupportChatIconSVG(), color: '#ed64a6' },
+        { view: 'popups', label: 'Popups', icon: MegaphoneIconSVG(), color: '#e53e3e' },
+        // Removed Game Chat and Videos
         { view: 'global-chat', label: 'Global Chat', icon: GlobalChatIconSVG(), color: '#667eea' },
         { view: 'languages', label: 'Languages', icon: GlobeIconSVG(), color: '#00b5d8' }, 
-        { view: 'videos', label: 'Videos', icon: PlayIconSVG(false), color: '#dd6b20' },
-        { view: 'support', label: 'Support', icon: FAQIconSVG(), color: '#0bc5ea' },
+        { view: 'support', label: 'Support', icon: SupportChatIconSVG(), color: '#0bc5ea' },
         { view: 'settings', label: 'Settings', icon: AdminPanelIconSVG(), color: '#718096' }
     ];
     

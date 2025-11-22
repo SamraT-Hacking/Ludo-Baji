@@ -9,6 +9,9 @@ const PopupManagement: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
+    
+    // Edit State
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // Form State
     const [formData, setFormData] = useState<Partial<PopupNotification>>({
@@ -66,6 +69,42 @@ const PopupManagement: React.FC = () => {
         }
     };
 
+    const resetForm = () => {
+        setFormData({
+            title: '',
+            image_url: '',
+            action_btn_text: '',
+            action_url: '',
+            trigger_type: 'ALWAYS',
+            frequency_limit: 1,
+            auto_close_ms: 0,
+            is_dismissible: true,
+            is_active: true,
+            schedule_start: '',
+            schedule_end: ''
+        });
+        setImageFile(null);
+        setEditingId(null);
+    };
+
+    const handleEdit = (popup: PopupNotification) => {
+        setFormData({
+            title: popup.title,
+            image_url: popup.image_url,
+            action_btn_text: popup.action_btn_text,
+            action_url: popup.action_url,
+            trigger_type: popup.trigger_type,
+            frequency_limit: popup.frequency_limit,
+            auto_close_ms: popup.auto_close_ms,
+            is_dismissible: popup.is_dismissible,
+            is_active: popup.is_active,
+            schedule_start: popup.schedule_start || '',
+            schedule_end: popup.schedule_end || ''
+        });
+        setEditingId(popup.id);
+        setIsModalOpen(true);
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!supabase) return;
@@ -79,31 +118,55 @@ const PopupManagement: React.FC = () => {
         const payload = {
             ...formData,
             image_url: imageUrl,
-            // Ensure dates are null if empty string
             schedule_start: formData.schedule_start || null,
             schedule_end: formData.schedule_end || null
         };
 
-        const { error } = await supabase.from('popup_notifications').insert([payload]);
+        let error;
+        if (editingId) {
+            // Update existing
+            const res = await supabase.from('popup_notifications').update(payload).eq('id', editingId);
+            error = res.error;
+        } else {
+            // Create new
+            const res = await supabase.from('popup_notifications').insert([payload]);
+            error = res.error;
+        }
         
         if (error) {
             alert(`Error: ${error.message}`);
         } else {
             setIsModalOpen(false);
-            setFormData({
-                title: '',
-                image_url: '',
-                action_btn_text: '',
-                action_url: '',
-                trigger_type: 'ALWAYS',
-                frequency_limit: 1,
-                auto_close_ms: 0,
-                is_dismissible: true,
-                is_active: true,
-                schedule_start: '',
-                schedule_end: ''
-            });
-            setImageFile(null);
+            resetForm();
+            fetchPopups();
+        }
+    };
+
+    const handleResendAsNew = async () => {
+        if (!supabase) return;
+        if (!confirm("This will create a NEW popup with the current details. Users will see this as a fresh notification (even if they closed the old one). Continue?")) return;
+
+        let imageUrl = formData.image_url;
+        if (imageFile) {
+            const url = await handleImageUpload(imageFile);
+            if (url) imageUrl = url;
+        }
+
+        const payload = {
+            ...formData,
+            image_url: imageUrl,
+            schedule_start: formData.schedule_start || null,
+            schedule_end: formData.schedule_end || null,
+            is_active: true // Ensure active on resend
+        };
+
+        const { error } = await supabase.from('popup_notifications').insert([payload]);
+        if (error) {
+            alert(`Error: ${error.message}`);
+        } else {
+            alert("Popup resent as new!");
+            setIsModalOpen(false);
+            resetForm();
             fetchPopups();
         }
     };
@@ -121,6 +184,11 @@ const PopupManagement: React.FC = () => {
         fetchPopups();
     };
 
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        resetForm();
+    }
+
     // Styles
     const headerStyle: React.CSSProperties = { fontSize: '2rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' };
     const buttonStyle: React.CSSProperties = { padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', color: 'white', fontWeight: 'bold' };
@@ -136,7 +204,7 @@ const PopupManagement: React.FC = () => {
         <div>
             <div style={headerStyle}>
                 <h1 className="admin-page-header" style={{margin: 0}}>Live Popups</h1>
-                <button onClick={() => setIsModalOpen(true)} style={{...buttonStyle, backgroundColor: '#48bb78', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                <button onClick={() => { resetForm(); setIsModalOpen(true); }} style={{...buttonStyle, backgroundColor: '#48bb78', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
                     <div dangerouslySetInnerHTML={{__html: PlusIconSVG()}} style={{width: '16px'}}/> Create Popup
                 </button>
             </div>
@@ -180,9 +248,14 @@ const PopupManagement: React.FC = () => {
                                         </button>
                                     </td>
                                     <td style={tdStyle}>
-                                        <button onClick={() => handleDelete(p.id)} style={{background: 'none', border: 'none', color: '#e53e3e', cursor: 'pointer'}}>
-                                            <div dangerouslySetInnerHTML={{__html: TrashIconSVG()}} style={{width: '18px'}} />
-                                        </button>
+                                        <div style={{display: 'flex', gap: '0.5rem'}}>
+                                            <button onClick={() => handleEdit(p)} style={{...buttonStyle, backgroundColor: '#4299e1', padding: '0.3rem 0.6rem', fontSize: '0.8rem'}}>
+                                                Edit
+                                            </button>
+                                            <button onClick={() => handleDelete(p.id)} style={{background: 'none', border: 'none', color: '#e53e3e', cursor: 'pointer'}}>
+                                                <div dangerouslySetInnerHTML={{__html: TrashIconSVG()}} style={{width: '18px'}} />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -195,7 +268,7 @@ const PopupManagement: React.FC = () => {
             {isModalOpen && (
                 <div style={modalOverlayStyle}>
                     <div style={modalContentStyle}>
-                        <h2 style={{marginTop: 0}}>Create Live Popup</h2>
+                        <h2 style={{marginTop: 0}}>{editingId ? 'Edit Popup' : 'Create Live Popup'}</h2>
                         <form onSubmit={handleSubmit}>
                             <div>
                                 <label style={labelStyle}>Title (Optional)</label>
@@ -204,6 +277,11 @@ const PopupManagement: React.FC = () => {
                             
                             <div>
                                 <label style={labelStyle}>Image</label>
+                                {formData.image_url && (
+                                    <div style={{marginBottom: '0.5rem'}}>
+                                        <img src={formData.image_url} alt="Preview" style={{maxHeight: '100px', borderRadius: '4px'}} />
+                                    </div>
+                                )}
                                 <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} style={{marginBottom: '1rem'}} />
                             </div>
 
@@ -273,10 +351,23 @@ const PopupManagement: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div style={{display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem'}}>
-                                <button type="button" onClick={() => setIsModalOpen(false)} style={{...buttonStyle, backgroundColor: '#a0aec0'}}>Cancel</button>
+                            <div style={{display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap'}}>
+                                <button type="button" onClick={handleCloseModal} style={{...buttonStyle, backgroundColor: '#a0aec0'}}>Cancel</button>
+                                
+                                {editingId && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleResendAsNew} 
+                                        disabled={uploading}
+                                        style={{...buttonStyle, backgroundColor: '#ed8936'}}
+                                        title="Create a fresh copy to trigger it again for users who have seen the original"
+                                    >
+                                        {uploading ? '...' : 'Resend as New'}
+                                    </button>
+                                )}
+
                                 <button type="submit" disabled={uploading} style={{...buttonStyle, backgroundColor: '#48bb78'}}>
-                                    {uploading ? 'Uploading...' : 'Save Popup'}
+                                    {uploading ? 'Uploading...' : (editingId ? 'Update Popup' : 'Save Popup')}
                                 </button>
                             </div>
                         </form>
