@@ -6,7 +6,8 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { 
     initDb, getLicenseByCode, getLicenseByToken, getAllLicenses, 
-    addLicense, updateLicenseStatus, resetLicenseDomain 
+    addLicense, updateLicenseStatus, resetLicenseDomain,
+    getSetting, updateSetting
 } = require('./database');
 
 const app = express();
@@ -55,7 +56,19 @@ app.post('/api/activate', async (req, res) => {
     }
 
     try {
-        // 1. Check local DB first to avoid Envato rate limits if blocked locally
+        // 0. Check Server Mode
+        const serverMode = await getSetting(db, 'server_mode') || 'live';
+        const isTestMode = serverMode === 'test';
+
+        // --- TEST MODE BYPASS ---
+        if (isTestMode && purchase_code === 'TEST-CODE') {
+            return res.status(200).json({
+                message: 'Test Activation Successful (Bypass)',
+                license_token: 'TEST-TOKEN-FOR-DEVELOPMENT'
+            });
+        }
+
+        // 1. Check local DB first
         const localRecord = await getLicenseByCode(db, purchase_code);
         if (localRecord && localRecord.status === 'blocked') {
             return res.status(403).json({ message: 'This license has been blocked by the administrator.' });
@@ -70,39 +83,36 @@ app.post('/api/activate', async (req, res) => {
         if (!response.ok) {
             const errorData = await response.json();
             const errorMessage = errorData.description || 'Invalid purchase code or Envato API error.';
-            return res.status(401).json({ message: errorMessage });
+            
+            // In Test Mode, we strictly test the API. If API fails, we fail.
+            // Unless using the magic 'TEST-CODE' above.
+            return res.status(401).json({ message: `Envato API Error: ${errorMessage}` });
         }
         
         const sale = await response.json();
         
-        // 3. Check if the purchase is for the correct item
-        if (sale.item?.id?.toString() !== ITEM_ID) {
+        // 3. Item ID Check
+        // In TEST MODE, we allow any Item ID (so you can test with other purchase codes you own)
+        // In LIVE MODE, strict check.
+        if (!isTestMode && sale.item?.id?.toString() !== ITEM_ID) {
             return res.status(400).json({ message: 'This purchase code is for a different product.' });
         }
 
-        // 4. Check local database logic
+        // 4. Local Database Logic
         if (localRecord) {
-            // Code already used, check if it's for the same domain
             if (localRecord.domain && localRecord.domain !== domain) {
+                // In Test Mode, optionally allow domain switching easily?
+                // For now, keep domain lock behavior consistent to test the logic.
                 return res.status(403).json({ message: 'This purchase code has already been activated on another domain.' });
             }
             
-            // If previously deactivated (domain is null) or active on same domain, verify it
-            // Update domain if it was null (re-activation)
-            if (!localRecord.domain) {
-                 // For simplicity, we assume reactivation doesn't need a new DB entry, just using the old one. 
-                 // But in a real app, you might want to update the domain column here.
-                 // Current simplified DB logic doesn't have 'updateDomain', so user must force deactivate first to clear it.
-                 // Actually, let's just return success if tokens match.
-            }
-
             return res.status(200).json({ 
                 message: 'License active.', 
                 license_token: localRecord.license_token 
             });
         }
 
-        // 5. New activation: Generate token and store in DB
+        // 5. New Activation
         const licenseToken = uuidv4();
         const hashedToken = await bcrypt.hash(licenseToken, 10);
 
@@ -119,9 +129,8 @@ app.post('/api/activate', async (req, res) => {
 
         await addLicense(db, newLicense);
 
-        // 6. Return the unhashed token to the client
         res.status(200).json({
-            message: 'Activation successful!',
+            message: `Activation successful! (${isTestMode ? 'Test Mode' : 'Live'})`,
             license_token: licenseToken
         });
 
@@ -142,8 +151,18 @@ app.post('/api/verify', async (req, res) => {
         return res.status(400).json({ valid: false, message: 'License token and domain are required.' });
     }
 
+    // Special handling for Test Token
+    if (license_token === 'TEST-TOKEN-FOR-DEVELOPMENT') {
+        const serverMode = await getSetting(db, 'server_mode');
+        if (serverMode === 'test') {
+            return res.status(200).json({ valid: true, message: 'Valid Test Token' });
+        } else {
+            return res.status(401).json({ valid: false, message: 'Test tokens are not allowed in Live mode.' });
+        }
+    }
+
     try {
-        const licenses = await getLicenseByToken(db); // Fetch all to compare hashes
+        const licenses = await getLicenseByToken(db);
         
         let foundLicense = null;
         for (const license of licenses) {
@@ -162,7 +181,6 @@ app.post('/api/verify', async (req, res) => {
             return res.status(403).json({ valid: false, message: 'License blocked.' });
         }
         
-        // Check domain lock
         if (foundLicense.domain && foundLicense.domain !== domain) {
             return res.status(403).json({ valid: false, message: 'License is not valid for this domain.' });
         }
@@ -177,10 +195,6 @@ app.post('/api/verify', async (req, res) => {
 
 // --- ADMIN ROUTES ---
 
-/**
- * @route POST /api/admin/login
- * @desc Verify admin password
- */
 app.post('/api/admin/login', (req, res) => {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
@@ -190,14 +204,9 @@ app.post('/api/admin/login', (req, res) => {
     }
 });
 
-/**
- * @route GET /api/admin/licenses
- * @desc Get all licenses
- */
 app.get('/api/admin/licenses', adminAuth, async (req, res) => {
     try {
         const licenses = await getAllLicenses(db);
-        // Don't send the hash
         const safeLicenses = licenses.map(l => {
             const { license_token_hash, ...rest } = l;
             return rest;
@@ -208,12 +217,8 @@ app.get('/api/admin/licenses', adminAuth, async (req, res) => {
     }
 });
 
-/**
- * @route POST /api/admin/block
- * @desc Block/Unblock a license
- */
 app.post('/api/admin/block', adminAuth, async (req, res) => {
-    const { id, status } = req.body; // status: 'active' or 'blocked'
+    const { id, status } = req.body;
     try {
         await updateLicenseStatus(db, id, status);
         res.json({ success: true, message: `License ${status}` });
@@ -222,15 +227,35 @@ app.post('/api/admin/block', adminAuth, async (req, res) => {
     }
 });
 
-/**
- * @route POST /api/admin/deactivate
- * @desc Force deactivate (clear domain)
- */
 app.post('/api/admin/deactivate', adminAuth, async (req, res) => {
     const { id } = req.body;
     try {
         await resetLicenseDomain(db, id);
-        res.json({ success: true, message: 'Domain binding cleared. User can reinstall.' });
+        res.json({ success: true, message: 'Domain binding cleared.' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// --- NEW: System Mode Routes ---
+
+app.get('/api/admin/mode', adminAuth, async (req, res) => {
+    try {
+        const mode = await getSetting(db, 'server_mode') || 'live';
+        res.json({ mode });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.post('/api/admin/mode', adminAuth, async (req, res) => {
+    const { mode } = req.body; // 'live' or 'test'
+    if (!['live', 'test'].includes(mode)) {
+        return res.status(400).json({ message: 'Invalid mode. Use "live" or "test".' });
+    }
+    try {
+        await updateSetting(db, 'server_mode', mode);
+        res.json({ success: true, mode });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

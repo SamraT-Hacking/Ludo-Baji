@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Search, Lock, Unlock, RefreshCw, User, Globe, Calendar, AlertCircle, CheckCircle, BarChart } from 'lucide-react';
+import { Shield, Search, Lock, Unlock, RefreshCw, User, Globe, Calendar, AlertCircle, CheckCircle, BarChart, ToggleLeft, ToggleRight, Server } from 'lucide-react';
 
 const API_URL = 'http://localhost:4000/api';
 
@@ -10,10 +10,12 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
+  const [serverMode, setServerMode] = useState('live');
 
   useEffect(() => {
     if (token) {
       fetchLicenses();
+      fetchServerMode();
     }
   }, [token]);
 
@@ -59,6 +61,38 @@ function App() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchServerMode = async () => {
+    try {
+      const res = await fetch(`${API_URL}/admin/mode`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setServerMode(data.mode);
+    } catch (err) {
+      console.error("Failed to fetch mode", err);
+    }
+  };
+
+  const toggleServerMode = async () => {
+    const newMode = serverMode === 'live' ? 'test' : 'live';
+    if (!confirm(`Switch system to ${newMode.toUpperCase()} mode? \n\n${newMode === 'test' ? 'Test Mode allows bypass codes and loose API validation.' : 'Live Mode enforces strict API and Domain checks.'}`)) return;
+
+    try {
+      const res = await fetch(`${API_URL}/admin/mode`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ mode: newMode })
+      });
+      const data = await res.json();
+      if (data.success) setServerMode(newMode);
+    } catch (err) {
+      alert("Failed to update mode");
     }
   };
 
@@ -142,7 +176,26 @@ function App() {
           <Shield size={32} color="var(--primary)" />
           <h1 style={{ margin: 0, fontSize: '1.5rem' }}>License Manager</h1>
         </div>
-        <button onClick={handleLogout} style={{ ...btnStyle, backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Logout</button>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          {/* Mode Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--bg-card)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+            <Server size={16} color="var(--text-muted)" />
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>System Mode:</span>
+            <button 
+              onClick={toggleServerMode}
+              style={{ 
+                background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                color: serverMode === 'live' ? 'var(--success)' : '#f59e0b',
+                fontWeight: 'bold', fontSize: '0.875rem'
+              }}
+            >
+              {serverMode === 'live' ? 'LIVE' : 'TEST'}
+              {serverMode === 'live' ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+            </button>
+          </div>
+
+          <button onClick={handleLogout} style={{ ...btnStyle, backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Logout</button>
+        </div>
       </header>
 
       {/* Stats Cards */}

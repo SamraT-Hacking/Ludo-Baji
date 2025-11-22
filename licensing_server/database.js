@@ -10,7 +10,9 @@ let db = new sqlite3.Database(DB_SOURCE, (err) => {
         throw err;
     } else {
         console.log('Connected to the SQLite database.');
-        const sql = `
+        
+        // Licenses Table
+        db.run(`
             CREATE TABLE IF NOT EXISTS licenses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 purchase_code TEXT UNIQUE NOT NULL,
@@ -23,20 +25,27 @@ let db = new sqlite3.Database(DB_SOURCE, (err) => {
                 activated_at TEXT,
                 status TEXT DEFAULT 'active'
             )
-        `;
-        db.run(sql, (err) => {
-            if (err) {
-                console.error("Error creating table:", err.message);
-            } else {
-                // Migration: Attempt to add status column if it doesn't exist (for existing dbs)
-                const alter = "ALTER TABLE licenses ADD COLUMN status TEXT DEFAULT 'active'";
-                db.run(alter, (err) => {
-                    // Ignore error if column already exists
-                });
+        `, (err) => {
+            if (err) console.error("Error creating licenses table:", err.message);
+        });
+
+        // Settings Table (For Test/Live Mode)
+        db.run(`
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        `, (err) => {
+            if (!err) {
+                // Insert default mode if not exists
+                const insert = "INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)";
+                db.run(insert, ["server_mode", "live"]);
             }
         });
     }
 });
+
+// --- License Functions ---
 
 const getLicenseByCode = (db, code) => {
     return new Promise((resolve, reject) => {
@@ -106,6 +115,27 @@ const resetLicenseDomain = (db, id) => {
     });
 };
 
+// --- Settings Functions ---
+
+const getSetting = (db, key) => {
+    return new Promise((resolve, reject) => {
+        const sql = "SELECT value FROM system_settings WHERE key = ?";
+        db.get(sql, [key], (err, row) => {
+            if (err) reject(err);
+            resolve(row ? row.value : null);
+        });
+    });
+};
+
+const updateSetting = (db, key, value) => {
+    return new Promise((resolve, reject) => {
+        const sql = "INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?";
+        db.run(sql, [key, value, value], function(err) {
+            if (err) reject(err);
+            resolve({ changes: this.changes });
+        });
+    });
+};
 
 module.exports = {
     initDb: () => db,
@@ -114,5 +144,7 @@ module.exports = {
     getAllLicenses,
     addLicense,
     updateLicenseStatus,
-    resetLicenseDomain
+    resetLicenseDomain,
+    getSetting,
+    updateSetting
 };
