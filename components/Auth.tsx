@@ -127,7 +127,7 @@ const Auth: React.FC = () => {
                   {t('ban_notice_p1', 'Your account has been suspended due to a violation of our terms of service. If you believe this is a mistake, please contact our support team.')}
               </p>
               <p>
-                  {t('ban_notice_p2_1', 'Support Email:')} <a href="mailto:info.samratinclab@gmail.com">support@dreamludo.com</a>
+                  {t('ban_notice_p2_1', 'Support Email:')} <a href="mailto:info.samratinclab@gmail.com">info.samratinclab@gmail.com</a>
               </p>
               <button className="ban-notice-back-btn" onClick={() => setShowBanNotice(false)}>
                   {t('ban_notice_btn', 'Try another account')}

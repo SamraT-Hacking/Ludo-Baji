@@ -7,7 +7,7 @@ const SupportChat: React.FC = () => {
     return (
         <div style={pageStyle}>
             <h1 style={headerStyle}>Admin Support </h1>
-            <p style={textStyle}>Live support chat is coming soon. For now, please contact us at support@dreamludo.com for any assistance.</p>
+            <p style={textStyle}>Live support chat is coming soon. For now, please contact us at info.samratinclab@gmail.com for any assistance.</p>
         </div>
     );
 };

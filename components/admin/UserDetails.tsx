@@ -199,7 +199,7 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onBack }) => {
                         amount: amount,
                         type: 'DEPOSIT',
                         status: 'COMPLETED',
-                        description: `Added Money From Admin(+) ${balanceNote ? '- ' + balanceNote : ''}`
+                        description: `Added Money From Admin ${balanceNote ? '- ' + balanceNote : ''}`
                     });
                 if (txError) throw txError;
 
@@ -220,7 +220,7 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onBack }) => {
                         amount: -amount, // Negative for deduction display in some views, though schema tracks absolute usually, standard practice for withdrawal types is often negative representation in UI
                         type: 'WITHDRAWAL',
                         status: 'COMPLETED',
-                        description: `Debit Money From Admin(-) ${balanceNote ? '- ' + balanceNote : ''}`
+                        description: `Debit Money From Admin ${balanceNote ? '- ' + balanceNote : ''}`
                     });
                 if (txError) throw txError;
             }
