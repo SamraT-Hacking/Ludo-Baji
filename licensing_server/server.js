@@ -1,4 +1,3 @@
-
 // licensing_server/server.js
 require('dotenv').config();
 const express = require('express');
@@ -7,8 +6,8 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { 
     initDb, getLicenseByCode, getLicenseByToken, getAllLicenses, 
-    addLicense, updateLicenseStatus, resetLicenseDomain, deleteLicense,
-    getSetting, updateSetting
+    addLicense, updateLicenseTokenHash, updateLicenseStatus, resetLicenseDomain, 
+    deleteLicense, getSetting, updateSetting
 } = require('./database');
 
 const app = express();
@@ -23,14 +22,12 @@ if (!ENVATO_TOKEN || !ITEM_ID) {
 }
 
 // --- Middleware ---
-// Allow all origins for easier testing, especially with localhost ports
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'DELETE', 'OPTIONS']
 }));
 app.use(express.json());
 
-// Request Logger
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
@@ -50,40 +47,26 @@ const adminAuth = (req, res, next) => {
 
 // --- API Endpoints ---
 
-// Health check
 app.get('/', (req, res) => {
     res.send('Licensing Server is running.');
 });
 
-/**
- * @route POST /api/activate
- * @desc Activates a license using a CodeCanyon purchase code.
- */
 app.post('/api/activate', async (req, res) => {
-    // --- DETAILED DEBUG LOGGING ---
-    console.log("------------------------------------------------");
-    console.log("INCOMING ACTIVATION REQUEST");
-    console.log("Body Received:", req.body);
-    console.log("Headers:", req.headers);
-    console.log("------------------------------------------------");
-
-    const { purchase_code, domain } = req.body;
+    let { purchase_code, domain } = req.body;
 
     if (!purchase_code || !domain) {
-        console.error("Error: Missing purchase_code or domain in body.");
         return res.status(400).json({ message: 'Purchase code and domain are required.' });
     }
 
+    // Sanitize domain
+    domain = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+
     try {
-        // 0. Check Server Mode
         const serverMode = await getSetting(db, 'server_mode') || 'live';
         const isTestMode = serverMode === 'test';
         
-        console.log(`Server Mode: ${serverMode}`);
-
         // --- TEST MODE LOGIC ---
         if (isTestMode) {
-            // 1. Developer Bypass
             if (purchase_code === 'TEST-CODE') {
                 return res.status(200).json({
                     message: 'Test Activation Successful (Dev Bypass)',
@@ -91,33 +74,33 @@ app.post('/api/activate', async (req, res) => {
                 });
             }
 
-            // 2. MOCK Simulation (For testing flow without owning a sold item)
             if (purchase_code.startsWith('MOCK-')) {
-                // Simulate a database entry without calling Envato
-                const mockLicenseToken = uuidv4();
-                const hashedToken = await bcrypt.hash(mockLicenseToken, 10);
-                
                 const existing = await getLicenseByCode(db, purchase_code);
+                
+                // --- FIX: Re-issue token for existing MOCK activations ---
                 if (existing) {
-                     return res.status(200).json({ 
-                        message: 'Mock License active (Already Existed).', 
-                        license_token: "EXISTING_ACTIVATION" // FIX: Send a signal, not the hash.
+                    if (existing.domain && existing.domain !== domain) {
+                        return res.status(403).json({ message: `Mock license is already active on: ${existing.domain}` });
+                    }
+                    const newMockToken = uuidv4();
+                    const newHashedToken = await bcrypt.hash(newMockToken, 10);
+                    await updateLicenseTokenHash(db, purchase_code, newHashedToken);
+                    return res.status(200).json({ 
+                        message: 'Mock License re-activated.', 
+                        license_token: newMockToken
                     });
                 }
 
+                const mockLicenseToken = uuidv4();
+                const hashedToken = await bcrypt.hash(mockLicenseToken, 10);
                 const newLicense = {
-                    purchase_code,
-                    domain,
-                    license_token_hash: hashedToken,
-                    item_name: "Mock Product (Test Mode)",
-                    buyer: "Mock Buyer",
+                    purchase_code, domain, license_token_hash: hashedToken,
+                    item_name: "Mock Product (Test Mode)", buyer: "Mock Buyer",
                     license_type: "Regular License (Mock)",
                     supported_until: new Date(Date.now() + 365*24*60*60*1000).toISOString(),
                     activated_at: new Date().toISOString(),
                 };
-
                 await addLicense(db, newLicense);
-
                 return res.status(200).json({
                     message: 'Mock Activation Successful! (Test Mode)',
                     license_token: mockLicenseToken
@@ -126,15 +109,11 @@ app.post('/api/activate', async (req, res) => {
         }
 
         // --- STANDARD VALIDATION FLOW ---
-
-        // 1. Check local DB first
         const localRecord = await getLicenseByCode(db, purchase_code);
         if (localRecord && localRecord.status === 'blocked') {
             return res.status(403).json({ message: 'This license has been blocked by the administrator.' });
         }
 
-        // 2. Verify with Envato API
-        console.log(`Verifying with Envato API for code: ${purchase_code}`);
         const envatoUrl = `https://api.envato.com/v3/market/author/sale?code=${purchase_code}`;
         const response = await fetch(envatoUrl, {
             headers: { 'Authorization': `Bearer ${ENVATO_TOKEN}` }
@@ -143,60 +122,47 @@ app.post('/api/activate', async (req, res) => {
         if (!response.ok) {
             const errorData = await response.json();
             const description = errorData.description || 'Unknown error';
-            console.error("Envato API Error:", description);
-            
-            // Provide clear feedback if user tries to verify a bought code instead of sold code
             if (description.includes('No sale belonging to the current user')) {
                 return res.status(404).json({ 
                     message: `Envato Verification Failed. \n\nReason: The API could not find a sale for this code in your account.\n\nNote: You can only verify codes for items YOU SOLD as an author. You cannot verify items you BOUGHT from others.` 
                 });
             }
-
             return res.status(401).json({ message: `Envato API Error: ${description}` });
         }
         
         const sale = await response.json();
-        console.log("Envato Sale Found:", sale.item.name);
         
-        // 3. Item ID Check
-        // In TEST MODE, we allow any Item ID (so you can test with other purchase codes you sold)
-        // In LIVE MODE, strict check.
         if (!isTestMode && sale.item?.id?.toString() !== ITEM_ID) {
-            console.error(`Item ID Mismatch. Expected: ${ITEM_ID}, Got: ${sale.item?.id}`);
             return res.status(400).json({ message: 'This purchase code is for a different product.' });
         }
 
-        // 4. Local Database Logic (Domain Locking)
+        // --- CORE FIX: Handle existing licenses and re-issue token ---
         if (localRecord) {
             if (localRecord.domain && localRecord.domain !== domain) {
-                console.warn(`Domain mismatch. Locked to: ${localRecord.domain}, Request from: ${domain}`);
-                return res.status(403).json({ message: `This purchase code is already active on: ${localRecord.domain}` });
+                return res.status(403).json({ message: `This purchase code is already active on another domain: ${localRecord.domain}` });
             }
             
+            // Re-issue a new token for the user.
+            const newLicenseToken = uuidv4();
+            const newHashedToken = await bcrypt.hash(newLicenseToken, 10);
+            await updateLicenseTokenHash(db, purchase_code, newHashedToken);
+
             return res.status(200).json({ 
-                message: 'License already active for this domain.', 
-                license_token: "EXISTING_ACTIVATION" 
+                message: 'License re-activated successfully.', 
+                license_token: newLicenseToken 
             });
         }
 
-        // 5. New Activation
+        // New Activation
         const licenseToken = uuidv4();
         const hashedToken = await bcrypt.hash(licenseToken, 10);
-
         const newLicense = {
-            purchase_code,
-            domain,
-            license_token_hash: hashedToken,
-            item_name: sale.item.name,
-            buyer: sale.buyer,
-            license_type: sale.license,
-            supported_until: sale.supported_until,
-            activated_at: new Date().toISOString(),
+            purchase_code, domain, license_token_hash: hashedToken,
+            item_name: sale.item.name, buyer: sale.buyer, license_type: sale.license,
+            supported_until: sale.supported_until, activated_at: new Date().toISOString(),
         };
-
         await addLicense(db, newLicense);
-        console.log("New license activated successfully.");
-
+        
         res.status(200).json({
             message: `Activation successful! (${isTestMode ? 'Test Mode' : 'Live'})`,
             license_token: licenseToken
@@ -208,10 +174,7 @@ app.post('/api/activate', async (req, res) => {
     }
 });
 
-/**
- * @route POST /api/verify
- * @desc Verifies a license token for a specific domain.
- */
+
 app.post('/api/verify', async (req, res) => {
     const { license_token, domain } = req.body;
 
@@ -219,7 +182,6 @@ app.post('/api/verify', async (req, res) => {
         return res.status(400).json({ valid: false, message: 'License token and domain are required.' });
     }
 
-    // Special handling for Test Token
     if (license_token === 'TEST-TOKEN-FOR-DEVELOPMENT') {
         const serverMode = await getSetting(db, 'server_mode');
         if (serverMode === 'test') {
@@ -228,14 +190,9 @@ app.post('/api/verify', async (req, res) => {
             return res.status(401).json({ valid: false, message: 'Test tokens are not allowed in Live mode.' });
         }
     }
-    
-    if (license_token === 'EXISTING_ACTIVATION') {
-         return res.status(200).json({ valid: true, message: 'Re-verified existing session.' });
-    }
 
     try {
         const licenses = await getLicenseByToken(db);
-        
         let foundLicense = null;
         for (const license of licenses) {
             const match = await bcrypt.compare(license_token, license.license_token_hash);
@@ -253,7 +210,8 @@ app.post('/api/verify', async (req, res) => {
             return res.status(403).json({ valid: false, message: 'License blocked.' });
         }
         
-        if (foundLicense.domain && foundLicense.domain !== domain) {
+        const sanitizedDomain = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+        if (foundLicense.domain && foundLicense.domain !== sanitizedDomain) {
             return res.status(403).json({ valid: false, message: 'License is not valid for this domain.' });
         }
 
@@ -309,7 +267,6 @@ app.post('/api/admin/deactivate', adminAuth, async (req, res) => {
     }
 });
 
-// NEW: Delete License Endpoint
 app.delete('/api/admin/license/:id', adminAuth, async (req, res) => {
     const { id } = req.params;
     try {
@@ -319,8 +276,6 @@ app.delete('/api/admin/license/:id', adminAuth, async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-
-// --- NEW: System Mode Routes ---
 
 app.get('/api/admin/mode', adminAuth, async (req, res) => {
     try {
@@ -332,7 +287,7 @@ app.get('/api/admin/mode', adminAuth, async (req, res) => {
 });
 
 app.post('/api/admin/mode', adminAuth, async (req, res) => {
-    const { mode } = req.body; // 'live' or 'test'
+    const { mode } = req.body;
     if (!['live', 'test'].includes(mode)) {
         return res.status(400).json({ message: 'Invalid mode. Use "live" or "test".' });
     }

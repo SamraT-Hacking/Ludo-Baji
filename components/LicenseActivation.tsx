@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { LudoLogoSVG } from '../assets/icons';
 
@@ -14,6 +13,15 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
     const [domain, setDomain] = useState(window.location.hostname || ''); 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(initialError);
+
+    const handleDomainChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        // Sanitize domain input to prevent common user errors
+        const sanitized = e.target.value
+            .toLowerCase()
+            .replace(/^https?:\/\//, '') // Remove http/https
+            .replace(/\/$/, ''); // Remove trailing slash
+        setDomain(sanitized);
+    };
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -32,14 +40,6 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
             return;
         }
 
-        console.log("Sending activation request:", {
-            url: `${serverUrl}/api/activate`,
-            body: {
-                purchase_code: purchaseCode,
-                domain: domain
-            }
-        });
-
         try {
             // Attempt to connect to the server
             const response = await fetch(`${serverUrl}/api/activate`, {
@@ -47,7 +47,7 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     purchase_code: purchaseCode,
-                    domain: domain
+                    domain: domain.trim() // Send the sanitized domain
                 })
             });
 
@@ -57,14 +57,9 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                 throw new Error(data.message || 'An unknown error occurred.');
             }
 
-            // FIX: Handle the different success responses
-            if (data.license_token && data.license_token !== 'EXISTING_ACTIVATION') {
-                // This is a new, valid token. Save it.
+            // The server now ALWAYS returns a valid token on success (new or re-issued).
+            if (data.license_token) {
                 localStorage.setItem('license_token', data.license_token);
-                onActivationSuccess();
-            } else if (data.license_token === 'EXISTING_ACTIVATION') {
-                // The server confirmed an existing activation. The token is already in local storage.
-                // We can just call success to dismiss the activation screen.
                 onActivationSuccess();
             } else {
                 throw new Error('Server did not return a valid license token.');
@@ -126,7 +121,7 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                         <span className="input-icon"><IconKey /></span>
                         <input
                             type="text"
-                            placeholder="Enter Purchase Code"
+                            placeholder="Your CodeCanyon Purchase Code"
                             value={purchaseCode}
                             onChange={e => setPurchaseCode(e.target.value)}
                             required
@@ -138,9 +133,9 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                         <span className="input-icon"><IconGlobe /></span>
                         <input
                             type="text"
-                            placeholder="Enter Domain (e.g. example.com)"
+                            placeholder="Domain (e.g. yoursite.com)"
                             value={domain}
-                            onChange={e => setDomain(e.target.value)}
+                            onChange={handleDomainChange}
                             required
                             className="auth-input"
                         />

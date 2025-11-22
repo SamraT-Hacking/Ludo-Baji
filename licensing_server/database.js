@@ -95,6 +95,16 @@ const addLicense = (db, license) => {
     });
 };
 
+const updateLicenseTokenHash = (db, purchaseCode, newHash) => {
+    return new Promise((resolve, reject) => {
+        const sql = "UPDATE licenses SET license_token_hash = ? WHERE purchase_code = ?";
+        db.run(sql, [newHash, purchaseCode], function(err) {
+            if (err) reject(err);
+            resolve({ changes: this.changes });
+        });
+    });
+};
+
 const updateLicenseStatus = (db, id, status) => {
     return new Promise((resolve, reject) => {
         const sql = "UPDATE licenses SET status = ? WHERE id = ?";
@@ -153,6 +163,7 @@ module.exports = {
     getLicenseByToken,
     getAllLicenses,
     addLicense,
+    updateLicenseTokenHash, // EXPORTED
     updateLicenseStatus,
     resetLicenseDomain,
     deleteLicense,
