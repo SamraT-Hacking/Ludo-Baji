@@ -187,6 +187,30 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Realtime Maintenance Mode Listener
+  useEffect(() => {
+      if (!supabase) return;
+
+      const channel = supabase.channel('app-maintenance-updates')
+          .on('postgres_changes', { 
+              event: 'UPDATE', 
+              schema: 'public', 
+              table: 'app_settings', 
+              filter: 'key=eq.maintenance_mode' 
+          }, (payload) => {
+              const newVal = payload.new as any;
+              if (newVal && newVal.value) {
+                  console.log("Maintenance mode updated:", newVal.value);
+                  setMaintenanceMode(newVal.value);
+              }
+          })
+          .subscribe();
+
+      return () => {
+          supabase.removeChannel(channel);
+      };
+  }, []);
+
   // Unread Notifications Count
   useEffect(() => {
       if (!supabase || !session) return;
