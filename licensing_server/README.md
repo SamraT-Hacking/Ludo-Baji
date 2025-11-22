@@ -1,118 +1,46 @@
 
-# CodeCanyon Product Licensing Server
+# CodeCanyon Product Licensing Server (PostgreSQL Version)
 
-This server is required to activate and validate your purchase of the script. It connects to the official Envato API to verify purchase codes and locks each license to a single domain to prevent unauthorized redistribution.
-
-## Features
-
-- **Envato API Verification**: Securely validates purchase codes.
-- **Domain Locking**: Ties a license to the domain it was activated on.
-- **SQLite Database**: Self-contained, file-based database. No external database setup is required.
-- **Simple Setup**: Can be deployed on any Node.js hosting service (like Render, Vercel, etc.) or a traditional VPS.
-
----
+This server activates and validates your purchase using a PostgreSQL database to ensure data persistence on cloud platforms like Render.
 
 ## 🚀 Setup Instructions
 
-Follow these steps to get your licensing server running.
+### Step 1: Render PostgreSQL Setup
 
-### Step 1: Get Your Envato Personal Token
+1.  Log in to your **Render Dashboard**.
+2.  Click **New +** and select **PostgreSQL**.
+3.  Name it (e.g., `license-db`), select the region, and choose the **Free** plan.
+4.  Click **Create Database**.
+5.  Once created, copy the **Internal Connection String**. It looks like: `postgres://user:password@hostname/dbname`.
 
-1.  Go to the [Envato API personal tokens page](https://build.envato.com/my-tokens).
-2.  Click **"Create a new token"**.
-3.  Give your token a name (e.g., "My App License Server").
-4.  Under "Permissions needed", make sure to check the following box:
-    *   **View and search Envato sites**
-    *   **View your Envato Account username**
-    *   **Verify purchases of your items**
-5.  Accept the terms and click **"Create Token"**.
-6.  **Important**: Copy your token immediately. You will **not** be able to see it again.
+### Step 2: Deploy Licensing Server
 
-### Step 2: Configure Environment Variables
+1.  Push this `licensing_server` code to GitHub.
+2.  Create a **New Web Service** on Render connected to that repo.
+3.  **Environment Variables**:
+    *   `PORT`: `4000`
+    *   `ENVATO_PERSONAL_TOKEN`: (Your Envato Token)
+    *   `CODECANYON_ITEM_ID`: (Your Item ID)
+    *   `DATABASE_URL`: (Paste the connection string from Step 1)
+4.  **Build Command**: `npm install`
+5.  **Start Command**: `npm start`
 
-Create a file named `.env` in this `licensing_server` directory. Copy the contents of `.env.example` into it and fill in the values:
+### Step 3: Frontend Configuration
 
-```env
-# Server Port
-PORT=4000
-
-# Your Envato Personal Token from Step 1
-ENVATO_PERSONAL_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# The Item ID of the product on CodeCanyon.
-# You can find this in the URL of the item page. (e.g., for https://codecanyon.net/item/my-script/12345, the ID is 12345)
-CODECANYON_ITEM_ID=12345678
-```
-
-### Step 3: Install Dependencies
-
-Open your terminal in the `licensing_server` directory and run:
-
-```bash
-npm install
-```
-
-### Step 4: Run the Server
-
-Start the server with:
-
-```bash
-npm start
-```
-
-You should see the message: `Licensing server running on http://localhost:4000`.
-
----
-
-## 💾 Data Persistence (Important for Render users)
-
-**Why is my data lost on deploy?**
-Render (and similar cloud platforms) use ephemeral file systems. This means every time you redeploy, the disk is wiped, deleting the `licenses.db` file.
-
-**How to fix it:**
-1.  In your Render Service settings, click on the **Disks** tab.
-2.  Click **Add Disk**.
-3.  **Name**: `license_data` (or any name).
-4.  **Mount Path**: `/var/data`.
-5.  **Size**: 1 GB is sufficient.
-6.  Go to the **Environment** tab.
-7.  Add a new Environment Variable:
-    *   **Key**: `DB_PATH`
-    *   **Value**: `/var/data/licenses.db`
-
-This configuration tells the server to save the database on the persistent disk instead of the temporary folder, ensuring your license data survives deployments and restarts.
-
----
-
-## 📦 Deployment
-
-You can deploy this server to any Node.js hosting provider.
-
-### Example: Deploying on Render.com (Free Tier available)
-
-1.  Push this `licensing_server` directory to its own GitHub repository.
-2.  On Render, create a new **"Web Service"**.
-3.  Connect it to your new GitHub repository.
-4.  Configure the service:
-    *   **Name**: `my-license-server` (or anything you like)
-    *   **Environment**: Node
-    *   **Build Command**: `npm install`
-    *   **Start Command**: `npm start`
-5.  Go to the **"Environment"** tab for your new service.
-6.  Add the environment variables from your `.env` file (`PORT`, `ENVATO_PERSONAL_TOKEN`, `CODECANYON_ITEM_ID`).
-7.  Click **"Create Web Service"**.
-
-Render will automatically deploy your server. Once it's live, you will get a URL like `https://my-license-server.onrender.com`.
-
-### Final Step: Update Frontend Configuration
-
-After deploying your licensing server, you must update the URL in your main React application.
-
-Open `src/App.tsx` (or `App.tsx` in the root) and change the `LICENSE_SERVER_URL` constant to your live server URL:
+Update your React App's `src/App.tsx` (or `App.tsx` root):
 
 ```javascript
-// In App.tsx
-const LICENSE_SERVER_URL = 'https://my-license-server.onrender.com';
+const LICENSE_SERVER_URL = 'https://your-web-service-name.onrender.com';
 ```
 
-Your application is now fully protected!
+## 📋 Prerequisites
+
+*   **Node.js**
+*   **PostgreSQL Database** (Render Free Tier recommended)
+*   **Envato Personal Token**
+
+## Features
+
+- **Persistent Data**: Uses PostgreSQL, so data is safe even if the server restarts.
+- **Envato Verification**: Checks purchase codes against the official API.
+- **Domain Locking**: Restricts license usage to one active domain.
