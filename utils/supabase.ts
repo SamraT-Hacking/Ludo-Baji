@@ -108,6 +108,23 @@ create table if not exists public.notification_read_status (
     unique(notification_id, user_id)
 );
 
+-- Popup Notifications Table (New Feature)
+CREATE TABLE IF NOT EXISTS public.popup_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    title TEXT,
+    image_url TEXT,
+    action_url TEXT,
+    action_btn_text TEXT,
+    trigger_type TEXT DEFAULT 'ALWAYS', -- 'ALWAYS', 'ONCE_PER_USER', 'DAILY_LIMIT', 'SCHEDULE'
+    frequency_limit INTEGER DEFAULT 1, -- For DAILY_LIMIT
+    schedule_start TIMESTAMPTZ, -- For SCHEDULE
+    schedule_end TIMESTAMPTZ,   -- For SCHEDULE
+    auto_close_ms INTEGER DEFAULT 0, -- 0 means disable auto close
+    is_dismissible BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN DEFAULT FALSE
+);
+
 -- App Settings Table (for rules, admin status, etc.)
 CREATE TABLE IF NOT EXISTS public.app_settings (
     key TEXT PRIMARY KEY,
@@ -340,6 +357,13 @@ drop policy if exists "Admins can manage notifications." on public.notifications
 create policy "Admins can manage notifications." on public.notifications for all using (public.is_admin());
 drop policy if exists "Users can manage their read status." on public.notification_read_status;
 create policy "Users can manage their read status." on public.notification_read_status for all using (user_id = auth.uid());
+
+-- Popup Notifications
+alter table public.popup_notifications enable row level security;
+drop policy if exists "Popups are public." on public.popup_notifications;
+create policy "Popups are public." on public.popup_notifications for select using (true);
+drop policy if exists "Admins can manage popups." on public.popup_notifications;
+create policy "Admins can manage popups." on public.popup_notifications for all using (public.is_admin());
 
 -- App Settings
 alter table public.app_settings enable row level security;
@@ -991,146 +1015,6 @@ DROP POLICY IF EXISTS "Allow admins to manage screenshots" ON storage.objects;
 CREATE POLICY "Allow admins to manage screenshots" ON storage.objects FOR ALL USING (public.is_admin());
 
 
--- Section 7: MULTI-LANGUAGE SYSTEM
---------------------------------------------------------------------------------
-
--- Table for storing available languages
-CREATE TABLE IF NOT EXISTS public.app_languages (
-    code TEXT PRIMARY KEY, -- e.g., 'en', 'bn', 'es'
-    name TEXT NOT NULL,    -- e.g., 'English', 'Bengali'
-    flag_icon TEXT,        -- e.g., '🇺🇸', '🇧🇩'
-    is_rtl BOOLEAN DEFAULT FALSE,
-    is_default BOOLEAN DEFAULT FALSE,
-    active BOOLEAN DEFAULT TRUE
-);
-
--- Insert default English language
-INSERT INTO public.app_languages (code, name, flag_icon, is_default, active)
-VALUES ('en', 'English', '🇺🇸', TRUE, TRUE)
-ON CONFLICT (code) DO NOTHING;
-
--- Table for storing translation keys and values
--- The 'values' column stores a JSON object: {"en": "Hello", "bn": "হ্যালো"}
-CREATE TABLE IF NOT EXISTS public.app_translations (
-    key_name TEXT PRIMARY KEY,
-    category TEXT DEFAULT 'general', -- e.g., 'auth', 'game', 'admin'
-    values JSONB NOT NULL DEFAULT '{}'::jsonb
-);
-
--- RLS Policies for Language System
-ALTER TABLE public.app_languages ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Languages are viewable by everyone" ON public.app_languages;
-CREATE POLICY "Languages are viewable by everyone" ON public.app_languages FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Admins can manage languages" ON public.app_languages;
-CREATE POLICY "Admins can manage languages" ON public.app_languages FOR ALL USING (public.is_admin());
-
-ALTER TABLE public.app_translations ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Translations are viewable by everyone" ON public.app_translations;
-CREATE POLICY "Translations are viewable by everyone" ON public.app_translations FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Admins can manage translations" ON public.app_translations;
-CREATE POLICY "Admins can manage translations" ON public.app_translations FOR ALL USING (public.is_admin());
-
--- Initial Seed Data for App Keys (Comprehensive List)
-INSERT INTO public.app_translations (key_name, category, values) VALUES
--- Auth
-('auth_welcome_back', 'auth', '{"en": "Welcome Back!", "bn": "স্বাগতম!"}'),
-('auth_create_account', 'auth', '{"en": "Create an Account", "bn": "অ্যাকাউন্ট তৈরি করুন"}'),
-('auth_login_subtitle', 'auth', '{"en": "Log in to continue your game.", "bn": "গেম খেলতে লগ ইন করুন।"}'),
-('auth_signup_subtitle', 'auth', '{"en": "Join the fun and start playing.", "bn": "মজায় যোগ দিন এবং খেলা শুরু করুন।"}'),
-('auth_btn_login', 'auth', '{"en": "Log In", "bn": "লগ ইন"}'),
-('auth_btn_signup', 'auth', '{"en": "Sign Up", "bn": "সাইন আপ"}'),
-('auth_input_email', 'auth', '{"en": "Email or Phone", "bn": "ইমেইল বা ফোন"}'),
-('auth_input_password', 'auth', '{"en": "Password", "bn": "পাসওয়ার্ড"}'),
-('auth_input_fullname', 'auth', '{"en": "Full Name", "bn": "পুরো নাম"}'),
-('auth_input_phone', 'auth', '{"en": "Phone Number", "bn": "ফোন নম্বর"}'),
-('auth_input_referral', 'auth', '{"en": "Referral Code (Optional)", "bn": "রেফারেল কোড (ঐচ্ছিক)"}'),
-('auth_forgot_pass', 'auth', '{"en": "Forgot Password?", "bn": "পাসওয়ার্ড ভুলে গেছেন?"}'),
-
--- Navigation
-('nav_dashboard', 'nav', '{"en": "Dashboard", "bn": "ড্যাশবোর্ড"}'),
-('nav_game', 'nav', '{"en": "Game", "bn": "খেলা"}'),
-('nav_wallet', 'nav', '{"en": "Wallet", "bn": "ওয়ালেট"}'),
-('nav_leaderboard', 'nav', '{"en": "Leaderboard", "bn": "লিডারবোর্ড"}'),
-('nav_profile', 'nav', '{"en": "Profile", "bn": "প্রোফাইল"}'),
-('nav_how_to_play', 'nav', '{"en": "How To Play", "bn": "কিভাবে খেলবেন"}'),
-('nav_global_chat', 'nav', '{"en": "Global Chat", "bn": "গ্লোবাল চ্যাট"}'),
-('nav_more', 'nav', '{"en": "More", "bn": "আরও"}'),
-
--- Dashboard
-('dash_wallet_balance', 'dashboard', '{"en": "Wallet Balance", "bn": "ওয়ালেট ব্যালেন্স"}'),
-('dash_current_rating', 'dashboard', '{"en": "Current Rating", "bn": "বর্তমান রেটিং"}'),
-('dash_games_played', 'dashboard', '{"en": "Games Played", "bn": "খেলেছেন"}'),
-('dash_find_match', 'dashboard', '{"en": "Find a Match", "bn": "ম্যাচ খুঁজুন"}'),
-('dash_manage_wallet', 'dashboard', '{"en": "Manage Wallet", "bn": "ওয়ালেট পরিচালনা"}'),
-
--- Wallet
-('wallet_title', 'wallet', '{"en": "My Wallet", "bn": "আমার ওয়ালেট"}'),
-('wallet_total_balance', 'wallet', '{"en": "Current Balance", "bn": "বর্তমান ব্যালেন্স"}'),
-('wallet_deposit_balance', 'wallet', '{"en": "Deposit Balance", "bn": "ডিপোজিট ব্যালেন্স"}'),
-('wallet_win_balance', 'wallet', '{"en": "Winnings Balance", "bn": "উইনিং ব্যালেন্স"}'),
-('wallet_btn_deposit', 'wallet', '{"en": "Deposit", "bn": "ডিপোজিট"}'),
-('wallet_btn_withdraw', 'wallet', '{"en": "Withdraw", "bn": "উত্তোলন"}'),
-('wallet_history_title', 'wallet', '{"en": "Transaction History", "bn": "লেনদেন ইতিহাস"}'),
-('wallet_min_deposit', 'wallet', '{"en": "Min Deposit", "bn": "সর্বনিম্ন ডিপোজিট"}'),
-('wallet_min_withdraw', 'wallet', '{"en": "Min Withdraw", "bn": "সর্বনিম্ন উত্তোলন"}'),
-
--- Tournaments
-('tour_tab_upcoming', 'tournament', '{"en": "UPCOMING", "bn": "আসন্ন"}'),
-('tour_tab_ongoing', 'tournament', '{"en": "ONGOING", "bn": "চলমান"}'),
-('tour_tab_completed', 'tournament', '{"en": "COMPLETED", "bn": "সমাপ্ত"}'),
-('tour_tab_review', 'tournament', '{"en": "REVIEW", "bn": "রিভিউ"}'),
-('tour_join_btn', 'tournament', '{"en": "JOIN", "bn": "যোগ দিন"}'),
-('tour_joined_btn', 'tournament', '{"en": "JOINED", "bn": "যুক্ত হয়েছেন"}'),
-('tour_play_btn', 'tournament', '{"en": "PLAY", "bn": "খেলুন"}'),
-('tour_win_prize', 'tournament', '{"en": "Win Prize", "bn": "পুরস্কার"}'),
-('tour_entry_fee', 'tournament', '{"en": "Entry Fee", "bn": "এন্ট্রি ফি"}'),
-
--- Profile
-('prof_personal_info', 'profile', '{"en": "Personal Information", "bn": "ব্যক্তিগত তথ্য"}'),
-('prof_game_stats', 'profile', '{"en": "Game Statistics", "bn": "গেম পরিসংখ্যান"}'),
-('prof_change_pass', 'profile', '{"en": "Change Password", "bn": "পাসওয়ার্ড পরিবর্তন"}'),
-('prof_btn_save', 'profile', '{"en": "Save Changes", "bn": "পরিবর্তন সেভ করুন"}'),
-('prof_stat_matches', 'profile', '{"en": "Total Matches", "bn": "মোট ম্যাচ"}'),
-('prof_stat_wins', 'profile', '{"en": "Total Wins", "bn": "মোট জয়"}'),
-('prof_stat_losses', 'profile', '{"en": "Total Losses", "bn": "মোট হার"}'),
-('prof_stat_winnings', 'profile', '{"en": "Total Winnings", "bn": "মোট আয়"}'),
-
--- Game
-('game_lobby_title', 'game', '{"en": "Game Lobby", "bn": "গেম লবি"}'),
-('game_waiting_msg', 'game', '{"en": "Waiting for opponent...", "bn": "প্রতিপক্ষের অপেক্ষায়..."}'),
-('game_btn_leave', 'game', '{"en": "Leave Game", "bn": "গেম ত্যাগ করুন"}'),
-('game_btn_start', 'game', '{"en": "Start Game", "bn": "গেম শুরু করুন"}'),
-('game_roll_dice', 'game', '{"en": "Roll Dice", "bn": "ছক্কা চালুন"}'),
-('game_your_turn', 'game', '{"en": "Your Turn", "bn": "আপনার চাল"}'),
-('game_winner_title', 'game', '{"en": "Winner!", "bn": "বিজয়ী!"}'),
-('game_over_title', 'game', '{"en": "Game Over", "bn": "খেলা শেষ"}'),
-
--- Global Chat
-('chat_title', 'chat', '{"en": "Global Chat Room", "bn": "গ্লোবাল চ্যাট রুম"}'),
-('chat_warning', 'chat', '{"en": "⚠️ Don''t use bad language", "bn": "⚠️ খারাপ ভাষা ব্যবহার করবেন না"}'),
-('chat_placeholder', 'chat', '{"en": "Type a message...", "bn": "মেসেজ লিখুন..."}'),
-('chat_btn_send', 'chat', '{"en": "Send", "bn": "পাঠান"}'),
-
--- Refer
-('refer_title', 'refer', '{"en": "Refer & Earn", "bn": "রেফার ও আয়"}'),
-('refer_total_refer', 'refer', '{"en": "Total Refer", "bn": "মোট রেফার"}'),
-('refer_total_earn', 'refer', '{"en": "Total Refer Earn", "bn": "মোট রেফার আয়"}'),
-('refer_your_code', 'refer', '{"en": "Your Referral Code", "bn": "আপনার রেফারেল কোড"}'),
-('refer_copy_msg', 'refer', '{"en": "Tap to copy & share with your friends!", "bn": "কপি করতে ট্যাপ করুন এবং বন্ধুদের সাথে শেয়ার করুন!"}'),
-('refer_btn_history', 'refer', '{"en": "Refer History", "bn": "রেফার ইতিহাস"}'),
-('refer_btn_leaderboard', 'refer', '{"en": "Refer Leaderboard", "bn": "রেফার লিডারবোর্ড"}'),
-
--- Common
-('btn_close', 'common', '{"en": "Close", "bn": "বন্ধ করুন"}'),
-('btn_confirm', 'common', '{"en": "Confirm", "bn": "নিশ্চিত করুন"}'),
-('btn_cancel', 'common', '{"en": "Cancel", "bn": "বাতিল করুন"}'),
-('status_pending', 'common', '{"en": "PENDING", "bn": "অপেক্ষমান"}'),
-('status_completed', 'common', '{"en": "COMPLETED", "bn": "সম্পন্ন"}'),
-('status_failed', 'common', '{"en": "FAILED", "bn": "ব্যর্থ"}'),
-('label_loading', 'common', '{"en": "Loading...", "bn": "লোড হচ্ছে..."}')
-ON CONFLICT (key_name) DO NOTHING;
-
-
 -- Create bucket for Payment Methods Logos
 INSERT INTO storage.buckets (id, name, public) VALUES ('payment-methods', 'payment-methods', true) ON CONFLICT (id) DO NOTHING;
 
@@ -1149,6 +1033,15 @@ DROP POLICY IF EXISTS "Allow admins to upload landing assets" ON storage.objects
 CREATE POLICY "Allow admins to upload landing assets" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'landing-page-assets' AND public.is_admin());
 DROP POLICY IF EXISTS "Allow anyone to view landing assets" ON storage.objects;
 CREATE POLICY "Allow anyone to view landing assets" ON storage.objects FOR SELECT USING (bucket_id = 'landing-page-assets');
+
+-- Create bucket for Popup Images
+INSERT INTO storage.buckets (id, name, public) VALUES ('popup-images', 'popup-images', true) ON CONFLICT (id) DO NOTHING;
+
+-- Policies for popup-images bucket
+DROP POLICY IF EXISTS "Allow admins to upload popup images" ON storage.objects;
+CREATE POLICY "Allow admins to upload popup images" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'popup-images' AND public.is_admin());
+DROP POLICY IF EXISTS "Allow anyone to view popup images" ON storage.objects;
+CREATE POLICY "Allow anyone to view popup images" ON storage.objects FOR SELECT USING (bucket_id = 'popup-images');
 
 -- Default settings for Financial Limits and Maintenance Mode
 INSERT INTO public.app_settings (key, value)

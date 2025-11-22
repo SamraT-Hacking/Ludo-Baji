@@ -5,7 +5,7 @@ import {
     UserGroupIconSVG, TotalMatchesIconSVG, WalletIconSVG, 
     AdminPendingIconSVG, TransactionHistoryIconSVG, LeaderboardIconSVG,
     SupportChatIconSVG, FAQIconSVG, AdminPanelIconSVG, AdminCalendarIconSVG,
-    GlobalChatIconSVG, SunIconSVG, MoonIconSVG
+    GlobalChatIconSVG, SunIconSVG, MoonIconSVG, PlayIconSVG
 } from '../../assets/icons';
 
 // Globe Icon for Languages
@@ -14,6 +14,14 @@ const GlobeIconSVG = () => `
   <circle cx="12" cy="12" r="10"></circle>
   <line x1="2" y1="12" x2="22" y2="12"></line>
   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+</svg>
+`;
+
+// Megaphone Icon for Popups
+const MegaphoneIconSVG = () => `
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m3 11 18-5v12L3 14v-3z"></path>
+  <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
 </svg>
 `;
 
@@ -139,9 +147,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentView, setView, onExi
         { view: 'withdrawals', label: 'Withdrawals', icon: AdminPendingIconSVG(), color: '#ed8936' },
         { view: 'transactions', label: 'History', icon: TransactionHistoryIconSVG(), color: '#9f7aea' },
         { view: 'notifications', label: 'Notify', icon: LeaderboardIconSVG(), color: '#38b2ac' },
+        { view: 'popups', label: 'Popups', icon: MegaphoneIconSVG(), color: '#e53e3e' }, // New
         { view: 'chat', label: 'Game Chat', icon: SupportChatIconSVG(), color: '#ed64a6' },
         { view: 'global-chat', label: 'Global Chat', icon: GlobalChatIconSVG(), color: '#667eea' },
-        { view: 'languages', label: 'Languages', icon: GlobeIconSVG(), color: '#00b5d8' }, // New Link
+        { view: 'languages', label: 'Languages', icon: GlobeIconSVG(), color: '#00b5d8' }, 
+        { view: 'videos', label: 'Videos', icon: PlayIconSVG(false), color: '#dd6b20' },
         { view: 'support', label: 'Support', icon: FAQIconSVG(), color: '#0bc5ea' },
         { view: 'settings', label: 'Settings', icon: AdminPanelIconSVG(), color: '#718096' }
     ];

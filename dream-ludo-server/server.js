@@ -60,10 +60,6 @@ function isValidUuid(id) {
     return typeof id === 'string' && regex.test(id);
 }
 
-// ... (Payment Logic Functions remain unchanged for brevity, including processDepositServerSide, etc.) ...
-// Note: Since I am replacing the file content, I must include the payment logic. 
-// However, for the sake of this specific update request about the Timer, I will include the full content below.
-
 async function processDepositServerSide(transactionId, paymentMethod = null) {
     if (!isValidUuid(transactionId)) return false;
     try {
@@ -317,19 +313,13 @@ function startGameLoop(gameCode) {
             return;
         }
         
-        // Only decrease timer if the game is actively playing and not rolling/animating (optional)
-        // Usually Ludo timers run strictly.
         if (game.state.gameStatus === 'Playing' && game.state.diceValue === null && !game.state.isRolling) {
             if (game.state.turnTimeLeft > 0) {
                 game.state.turnTimeLeft--;
             } else {
-                // Time's up
                 console.log(`Time up for player in game ${gameCode}`);
                 await handleMissedTurn(game.state, supabase);
-                // handleMissedTurn updates state and possibly advances turn, resetting turnTimeLeft in game.js
             }
-            
-            // Broadcast updated time/state
             broadcastGameState(gameCode); 
         }
     }, 1000);
@@ -468,7 +458,6 @@ wss.on('connection', (ws, req) => {
                         let max_players = 2;
                         let tournamentId = null;
                         
-                        // Wrap DB call in try/catch to handle connection errors gracefully
                         const { data: tournament, error: tourError } = await supabase
                             .from('tournaments')
                             .select('*')
@@ -478,7 +467,6 @@ wss.on('connection', (ws, req) => {
                         
                         if (tourError) {
                             console.error("Error fetching tournament:", tourError.message);
-                            // Inform client about server error so it doesn't hang
                             ws.send(JSON.stringify({ type: 'ERROR', payload: { message: 'Server error: Failed to load game data. Please try again.' } }));
                             return;
                         }
@@ -516,18 +504,26 @@ wss.on('connection', (ws, req) => {
             switch (action) {
                 case 'START_GAME': 
                     await startGame(game.state, ws.userId, supabase); 
-                    startGameLoop(gameCode); // Start the timer loop
+                    startGameLoop(gameCode); 
                     break;
                 case 'ROLL_DICE': 
                     initiateRoll(game.state, ws.userId);
                     broadcastGameState(gameCode);
                     setTimeout(async () => {
-                        const rolledAgain = await completeRoll(game.state, ws.userId, supabase);
+                        const rollResult = await completeRoll(game.state, ws.userId, supabase);
                         broadcastGameState(gameCode);
-                        // If rolledAgain is true (no moves), handle turn pass
-                         if (rolledAgain) {
+                        
+                        // Handle delayed turn transitions for better UX
+                        if (rollResult === 'PENALTY') {
+                             // Wait 2s to show "Rolled three 6s" message, then advance
                              setTimeout(async () => {
-                                await handleMissedTurn(game.state, supabase); // Technically checking rules, might just auto-pass
+                                await advanceTurn(game.state, supabase);
+                                broadcastGameState(gameCode);
+                             }, 2000);
+                        } else if (rollResult === 'NO_MOVES') {
+                             // No valid moves, wait 1s then advance
+                             setTimeout(async () => {
+                                await advanceTurn(game.state, supabase); 
                                 broadcastGameState(gameCode);
                              }, 1000);
                         }

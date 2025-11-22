@@ -28,6 +28,7 @@ import ReferHistory from './components/ReferHistory';
 import ReferLeaderboard from './components/ReferLeaderboard';
 import SupportChatWidget from './components/SupportChatWidget';
 import GlobalChat from './components/GlobalChat';
+import GlobalPopup from './components/GlobalPopup'; // New Import
 
 import { GameStatus, Tournament, Notification, Profile as ProfileType } from './types';
 import { themes, ThemeName } from './themes';
@@ -542,6 +543,9 @@ function App() {
         )}
 
         <SupportChatWidget />
+        
+        {/* Global Popup Component */}
+        <GlobalPopup />
         
       </AppConfigContext.Provider>
     </LanguageProvider>

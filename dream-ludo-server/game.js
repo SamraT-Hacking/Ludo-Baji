@@ -250,7 +250,7 @@ function initiateRoll(gameState, playerId) {
 
 async function completeRoll(gameState, playerId, supabase) {
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    if (currentPlayer.playerId !== playerId || !gameState.isRolling) return;
+    if (currentPlayer.playerId !== playerId || !gameState.isRolling) return 'INVALID';
     
     currentPlayer.inactiveTurns = 0; // Player took an action, reset counter.
 
@@ -283,15 +283,16 @@ async function completeRoll(gameState, playerId, supabase) {
     // Rule 1.1: Three 6s in a row penalty
     if (currentPlayer.consecutiveSixes === 3) {
         gameState.message = `${currentPlayer.name} rolled three 6s! Turn forfeited.`;
+        gameState.movablePieces = []; // Lock pieces so they can't click
+        currentPlayer.consecutiveSixes = 0; // Reset count
+        
         await logTurnActivity(gameState, { 
             userId: currentPlayer.playerId, 
             name: currentPlayer.name, 
             description: `rolled a 3rd six (penalty). Turn lost.` 
         }, supabase);
         
-        // End turn immediately
-        await advanceTurn(gameState, supabase);
-        return true; // Signal that turn is handled (no moves to calculate)
+        return 'PENALTY'; // Signal server to delay then advance turn
     }
 
     const movablePieces = calculateMovablePieces(currentPlayer, diceValue);
@@ -300,9 +301,9 @@ async function completeRoll(gameState, playerId, supabase) {
     await logTurnActivity(gameState, { userId: currentPlayer.playerId, name: currentPlayer.name, description: `rolled a ${diceValue}.` }, supabase);
 
     if (movablePieces.length === 0) {
-        return true; // Indicates roll complete, but no moves, caller should handle turn pass delay
+        return 'NO_MOVES'; // Signal server to delay then advance turn
     }
-    return false;
+    return 'MOVES_AVAILABLE';
 }
 
 async function movePiece(gameState, playerId, pieceId, supabase) {

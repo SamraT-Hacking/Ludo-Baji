@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminSidebar from './AdminSidebar';
 import AdminDashboard from './AdminDashboard';
@@ -19,6 +17,8 @@ import { supabase } from '../../utils/supabase';
 import SupportManagement from './SupportManagement';
 import GlobalChatManagement from './GlobalChatManagement'; // New
 import LanguageManagement from './LanguageManagement'; // New Import
+import HowToPlayManagement from './HowToPlayManagement';
+import PopupManagement from './PopupManagement'; // New Import
 
 interface AdminPanelProps {
     onExit: () => void;
@@ -27,7 +27,7 @@ interface AdminPanelProps {
     toggleAppTheme: () => void;
 }
 
-export type AdminView = 'dashboard' | 'users' | 'matches' | 'chat' | 'transactions' | 'deposits' | 'withdrawals' | 'notifications' | 'settings' | 'support' | 'global-chat' | 'languages';
+export type AdminView = 'dashboard' | 'users' | 'matches' | 'chat' | 'transactions' | 'deposits' | 'withdrawals' | 'notifications' | 'settings' | 'support' | 'global-chat' | 'languages' | 'videos' | 'popups';
 
 const viewComponents: Record<AdminView, React.FC<any>> = {
     dashboard: AdminDashboard,
@@ -41,7 +41,9 @@ const viewComponents: Record<AdminView, React.FC<any>> = {
     settings: Settings,
     support: SupportManagement,
     'global-chat': GlobalChatManagement,
-    languages: LanguageManagement, // Registered
+    languages: LanguageManagement,
+    videos: HowToPlayManagement,
+    popups: PopupManagement, // Registered
 };
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onLogout, appTheme, toggleAppTheme }) => {

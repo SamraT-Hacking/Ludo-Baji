@@ -202,3 +202,19 @@ export interface SupportChatMessage {
     sent_by_admin: boolean;
     is_read: boolean;
 }
+
+export interface PopupNotification {
+    id: string;
+    created_at: string;
+    title: string;
+    image_url: string | null;
+    action_url: string | null;
+    action_btn_text: string | null;
+    trigger_type: 'ALWAYS' | 'ONCE_PER_USER' | 'DAILY_LIMIT' | 'SCHEDULE';
+    frequency_limit?: number; // Used for DAILY_LIMIT
+    schedule_start?: string; // ISO String
+    schedule_end?: string; // ISO String
+    auto_close_ms: number; // 0 = disabled
+    is_dismissible: boolean;
+    is_active: boolean;
+}
