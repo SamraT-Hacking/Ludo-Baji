@@ -71,7 +71,22 @@ function App() {
   const [theme, setTheme] = useState<ThemeName>('classic');
   const [gameCode, setGameCode] = useState<string | null>(null);
   const [session, setSession] = useState<any | null>(null);
-  const [currentView, setCurrentView] = useState<View>('tournaments');
+  
+  // VIEW STATE IS NOW DERIVED FROM HASH IN USEEFFECT, INITIAL STATE SET BELOW
+  const getInitialView = (): View => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash.startsWith('admin')) return 'admin';
+      const validViews: View[] = ['dashboard', 'tournaments', 'wallet', 'leaderboard', 'profile', 'how-to-play',
+      'transaction-history', 'privacy-policy', 'faq',
+      'support-chat', 'about-us', 'terms-and-conditions',
+      'refer-and-earn', 'refer-history', 'refer-leaderboard', 'global-chat'];
+      
+      if (validViews.includes(hash as View)) return hash as View;
+      return 'tournaments';
+  };
+
+  const [currentView, setCurrentView] = useState<View>(getInitialView());
+  
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
@@ -96,6 +111,57 @@ function App() {
       end_time: null
   });
   const [loadingMaintenance, setLoadingMaintenance] = useState(true);
+
+  // --- ROUTING LOGIC START ---
+  useEffect(() => {
+      const handleHashChange = () => {
+          const hash = window.location.hash.replace('#', '');
+          
+          // Handle Contest Details
+          if (hash.startsWith('contest-details')) {
+              // If we are here but don't have data (e.g. refresh), go back to tournaments
+              if (!selectedTournament) {
+                  window.location.hash = 'tournaments';
+              }
+              return;
+          }
+
+          // Handle Admin
+          if (hash.startsWith('admin')) {
+              if (currentView !== 'admin') setCurrentView('admin');
+              // We don't clear selectedTournament here immediately to allow back navigation logic,
+              // but typically going to admin clears user context
+              setSelectedTournament(null);
+              return;
+          }
+
+          const validViews: View[] = ['dashboard', 'tournaments', 'wallet', 'leaderboard', 'profile', 'how-to-play',
+          'transaction-history', 'privacy-policy', 'faq',
+          'support-chat', 'about-us', 'terms-and-conditions',
+          'refer-and-earn', 'refer-history', 'refer-leaderboard', 'global-chat'];
+
+          if (validViews.includes(hash as View)) {
+              setCurrentView(hash as View);
+              setSelectedTournament(null); // Clear contest overlay if we navigated to a main tab
+              setShowNotifications(false); // Clear notification overlay
+          } else if (!hash) {
+              // Default route
+              setCurrentView('tournaments');
+          }
+      };
+
+      // Initial check (in case of refresh on a specific hash)
+      handleHashChange();
+
+      window.addEventListener('hashchange', handleHashChange);
+      return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [selectedTournament, currentView]);
+
+  // Use this instead of setCurrentView directly to update URL
+  const navigateTo = (view: View) => {
+      window.location.hash = view;
+  };
+  // --- ROUTING LOGIC END ---
 
   // Version Check
   useEffect(() => {
@@ -263,10 +329,6 @@ function App() {
       if (gameError) setServerError(gameError);
   }, [gameError]);
 
-  const handleJoinGame = (code: string) => {
-      setGameCode(code);
-  };
-
   const handleResetGame = () => {
       leaveGame();
       setGameCode(null);
@@ -347,7 +409,7 @@ function App() {
           <LanguageProvider>
               <AppConfigContext.Provider value={appConfig}>
                   <AdminPanel 
-                      onExit={() => setCurrentView('dashboard')} 
+                      onExit={() => window.location.hash = 'dashboard'} 
                       onLogout={() => supabase?.auth.signOut()}
                       appTheme={theme === 'classic' ? 'light' : 'dark'}
                       toggleAppTheme={toggleAppTheme}
@@ -359,9 +421,10 @@ function App() {
 
   const handleViewContest = (tournament: Tournament) => {
       setSelectedTournament(tournament);
+      window.location.hash = `contest-details/${tournament.id}`;
   };
 
-  if (selectedTournament) {
+  if (selectedTournament && window.location.hash.includes('contest-details')) {
       return (
           <LanguageProvider>
               <AppConfigContext.Provider value={appConfig}>
@@ -378,8 +441,8 @@ function App() {
 
   const renderView = () => {
       switch (currentView) {
-          case 'dashboard': return <Dashboard setView={setCurrentView} />;
-          case 'tournaments': return <Tournaments userId={session.user.id} setView={setCurrentView} onViewContest={handleViewContest} />;
+          case 'dashboard': return <Dashboard setView={navigateTo} />;
+          case 'tournaments': return <Tournaments userId={session.user.id} setView={navigateTo} onViewContest={handleViewContest} />;
           case 'wallet': return <Wallet />;
           case 'leaderboard': return <Leaderboard />;
           case 'profile': return <Profile session={session} />;
@@ -390,11 +453,11 @@ function App() {
           case 'support-chat': return <SupportChat />;
           case 'about-us': return <AboutUs />;
           case 'terms-and-conditions': return <TermsAndConditions />;
-          case 'refer-and-earn': return <ReferAndEarn setView={setCurrentView} />;
+          case 'refer-and-earn': return <ReferAndEarn setView={navigateTo} />;
           case 'refer-history': return <ReferHistory />;
           case 'refer-leaderboard': return <ReferLeaderboard />;
           case 'global-chat': return <GlobalChat />;
-          default: return <Dashboard setView={setCurrentView} />;
+          default: return <Dashboard setView={navigateTo} />;
       }
   };
 
@@ -420,16 +483,16 @@ function App() {
 
         <FooterNav 
             currentView={currentView} 
-            setView={setCurrentView} 
+            setView={navigateTo} 
             onMoreClick={() => setIsMoreMenuOpen(true)} 
         />
 
         {isMoreMenuOpen && (
             <MoreMenu 
-                setView={(view) => { setCurrentView(view); setIsMoreMenuOpen(false); }} 
+                setView={(view) => { navigateTo(view); setIsMoreMenuOpen(false); }} 
                 onLogout={() => supabase?.auth.signOut()} 
                 isAdmin={isAdmin}
-                onEnterAdminView={() => { setCurrentView('admin'); setIsMoreMenuOpen(false); }}
+                onEnterAdminView={() => { window.location.hash = 'admin'; setIsMoreMenuOpen(false); }}
                 appTheme={getAppTheme()}
                 toggleAppTheme={toggleAppTheme}
             />
