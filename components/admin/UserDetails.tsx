@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect, useContext } from 'react';
 import { supabase } from '../../utils/supabase';
 import { AppConfigContext } from '../../App';
 import { 
     IdentityIconSVG, MoneyBagIconSVG, 
     TransactionHistoryIconSVG, TrophyIconSVG, UserGroupIconSVG,
-    BanIconSVG, TrashIconSVG, CopyIconSVG
+    BanIconSVG, TrashIconSVG, CopyIconSVG, PlusIconSVG
 } from '../../assets/icons';
 
 interface UserDetailsProps {
@@ -56,77 +57,84 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onBack }) => {
     const [showSqlModal, setShowSqlModal] = useState(false);
     const [copied, setCopied] = useState(false);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            if (!supabase) return;
-            setLoading(true);
-            try {
-                // 1. Profile
-                const { data: profileData, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('*') 
-                    .eq('id', userId)
-                    .single();
-                
-                if (profileError) throw profileError;
-                setProfile(profileData);
+    // State for Balance Management Modal
+    const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+    const [balanceAction, setBalanceAction] = useState<'credit' | 'debit'>('credit');
+    const [balanceAmount, setBalanceAmount] = useState('');
+    const [balanceNote, setBalanceNote] = useState('');
+    const [processingBalance, setProcessingBalance] = useState(false);
 
-                // 2. Transactions
-                const { data: transData } = await supabase
-                    .from('transactions')
-                    .select('*')
-                    .eq('user_id', userId)
-                    .order('created_at', { ascending: false });
-                setTransactions(transData || []);
+    const fetchData = async () => {
+        if (!supabase) return;
+        setLoading(true);
+        try {
+            // 1. Profile
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('*') 
+                .eq('id', userId)
+                .single();
+            
+            if (profileError) throw profileError;
+            setProfile(profileData);
 
-                // 3. Game History
-                const { data: gameData } = await supabase
-                    .from('tournament_results')
-                    .select('*, tournaments(title, prize_pool)')
-                    .eq('user_id', userId)
-                    .order('created_at', { ascending: false });
-                setMatchHistory(gameData || []);
+            // 2. Transactions
+            const { data: transData } = await supabase
+                .from('transactions')
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false });
+            setTransactions(transData || []);
 
-                // 4. Referrals
-                const { data: refData } = await supabase
-                    .from('profiles')
-                    .select('username, created_at')
-                    .eq('referred_by', userId);
-                setReferrals(refData || []);
-                
-                // 5. Fetch Auth Data (Email/Phone/LastLogin) using RPC
-                let email = profileData.email;
-                let rpcPhone = null;
-                let lastSignIn = null;
-                
-                const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_email_phone', { user_id: userId });
-                
-                if (rpcError && (rpcError.code === '42883' || rpcError.message.includes('function'))) {
-                    setMissingRpc(true);
-                }
-                
-                if (!rpcError && rpcData && rpcData.length > 0) {
-                    const data = rpcData[0];
-                    if (!email) email = data.email;
-                    if (data.phone) rpcPhone = data.phone;
-                    if (data.last_sign_in_at) lastSignIn = data.last_sign_in_at;
-                }
-                
-                const finalPhone = rpcPhone || profileData.phone || null;
+            // 3. Game History
+            const { data: gameData } = await supabase
+                .from('tournament_results')
+                .select('*, tournaments(title, prize_pool)')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false });
+            setMatchHistory(gameData || []);
 
-                setAuthData({
-                    email: email || 'Hidden (Auth Restricted)', 
-                    phone: finalPhone, 
-                    last_sign_in_at: lastSignIn 
-                });
-
-            } catch (err) {
-                console.error("Error fetching user details:", err);
-            } finally {
-                setLoading(false);
+            // 4. Referrals
+            const { data: refData } = await supabase
+                .from('profiles')
+                .select('username, created_at')
+                .eq('referred_by', userId);
+            setReferrals(refData || []);
+            
+            // 5. Fetch Auth Data (Email/Phone/LastLogin) using RPC
+            let email = profileData.email;
+            let rpcPhone = null;
+            let lastSignIn = null;
+            
+            const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_email_phone', { user_id: userId });
+            
+            if (rpcError && (rpcError.code === '42883' || rpcError.message.includes('function'))) {
+                setMissingRpc(true);
             }
-        };
+            
+            if (!rpcError && rpcData && rpcData.length > 0) {
+                const data = rpcData[0];
+                if (!email) email = data.email;
+                if (data.phone) rpcPhone = data.phone;
+                if (data.last_sign_in_at) lastSignIn = data.last_sign_in_at;
+            }
+            
+            const finalPhone = rpcPhone || profileData.phone || null;
 
+            setAuthData({
+                email: email || 'Hidden (Auth Restricted)', 
+                phone: finalPhone, 
+                last_sign_in_at: lastSignIn 
+            });
+
+        } catch (err) {
+            console.error("Error fetching user details:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchData();
     }, [userId]);
 
@@ -147,6 +155,85 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onBack }) => {
     const handleDeleteUser = async () => {
         if (window.confirm("DANGER: Are you sure you want to DELETE this user? This action removes all their data and cannot be undone easily.")) {
             alert("To permanently delete a user including Auth data, please use the Supabase Dashboard or a backend Admin function for security.");
+        }
+    };
+
+    const openBalanceModal = (action: 'credit' | 'debit') => {
+        setBalanceAction(action);
+        setBalanceAmount('');
+        setBalanceNote('');
+        setIsBalanceModalOpen(true);
+    };
+
+    const handleBalanceSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!supabase || !profile) return;
+
+        const amount = parseFloat(balanceAmount);
+        if (isNaN(amount) || amount <= 0) {
+            alert("Please enter a valid positive amount.");
+            return;
+        }
+
+        if (balanceAction === 'debit' && amount > profile.winnings_balance) {
+            alert(`Insufficient winnings balance. User has ${currencySymbol}${profile.winnings_balance.toFixed(2)}.`);
+            return;
+        }
+
+        setProcessingBalance(true);
+        try {
+            if (balanceAction === 'credit') {
+                // Update Profile: Add to Deposit Balance
+                const { error: profileError } = await supabase
+                    .from('profiles')
+                    .update({ deposit_balance: Number(profile.deposit_balance) + amount })
+                    .eq('id', userId);
+                
+                if (profileError) throw profileError;
+
+                // Add Transaction Record
+                const { error: txError } = await supabase
+                    .from('transactions')
+                    .insert({
+                        user_id: userId,
+                        amount: amount,
+                        type: 'DEPOSIT',
+                        status: 'COMPLETED',
+                        description: `Added Money From Admin(+) ${balanceNote ? '- ' + balanceNote : ''}`
+                    });
+                if (txError) throw txError;
+
+            } else {
+                // Update Profile: Deduct from Winnings Balance
+                const { error: profileError } = await supabase
+                    .from('profiles')
+                    .update({ winnings_balance: Number(profile.winnings_balance) - amount })
+                    .eq('id', userId);
+                
+                if (profileError) throw profileError;
+
+                // Add Transaction Record
+                const { error: txError } = await supabase
+                    .from('transactions')
+                    .insert({
+                        user_id: userId,
+                        amount: -amount, // Negative for deduction display in some views, though schema tracks absolute usually, standard practice for withdrawal types is often negative representation in UI
+                        type: 'WITHDRAWAL',
+                        status: 'COMPLETED',
+                        description: `Debit Money From Admin(-) ${balanceNote ? '- ' + balanceNote : ''}`
+                    });
+                if (txError) throw txError;
+            }
+
+            alert(`${balanceAction === 'credit' ? 'Money Added' : 'Money Deducted'} successfully.`);
+            setIsBalanceModalOpen(false);
+            fetchData(); // Refresh all data
+
+        } catch (e: any) {
+            console.error("Balance update error:", e);
+            alert(`Failed to update balance: ${e.message}`);
+        } finally {
+            setProcessingBalance(false);
         }
     };
     
@@ -263,6 +350,8 @@ $$ LANGUAGE plpgsql;
     
     const alertStyle: React.CSSProperties = { backgroundColor: '#fffaf0', border: '1px solid #fbd38d', color: '#9c4221', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' };
     const modalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 101 };
+    const modalContentStyle: React.CSSProperties = { backgroundColor: 'white', padding: '2rem', borderRadius: '12px', width: '90%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' };
+    const inputStyle: React.CSSProperties = { width: '100%', padding: '0.8rem', marginBottom: '1rem', border: '1px solid #ccc', borderRadius: '6px', fontSize: '1rem' };
 
     return (
         <div className="user-details-page">
@@ -361,6 +450,17 @@ $$ LANGUAGE plpgsql;
                         <span style={{ fontWeight: '500', fontSize: '0.9rem' }}>
                              {lastWithdraw ? `${new Date(lastWithdraw.created_at).toLocaleDateString()} (${currencySymbol}${Math.abs(lastWithdraw.amount)})` : 'Never'}
                         </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                        <button onClick={() => openBalanceModal('credit')} style={btnStyle('#48bb78')}>
+                            <div dangerouslySetInnerHTML={{__html: PlusIconSVG()}} style={{width:'16px'}} />
+                            Credit Deposit
+                        </button>
+                        <button onClick={() => openBalanceModal('debit')} style={btnStyle('#f56565')}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            Debit Winnings
+                        </button>
                     </div>
                 </DetailCard>
 
@@ -476,6 +576,53 @@ $$ LANGUAGE plpgsql;
                     </div>
                 </DetailCard>
             </div>
+
+            {/* Balance Management Modal */}
+            {isBalanceModalOpen && (
+                <div style={modalOverlayStyle}>
+                    <div style={modalContentStyle}>
+                        <h2 style={{ marginTop: 0, marginBottom: '1rem', textAlign: 'center' }}>
+                            {balanceAction === 'credit' ? 'Credit User Balance' : 'Debit User Balance'}
+                        </h2>
+                        <p style={{ textAlign: 'center', fontSize: '0.9rem', color: '#666', marginBottom: '1.5rem' }}>
+                            {balanceAction === 'credit' 
+                                ? 'Add funds to the user\'s DEPOSIT balance.' 
+                                : 'Deduct funds from the user\'s WINNINGS balance.'}
+                        </p>
+                        <form onSubmit={handleBalanceSubmit}>
+                            <div>
+                                <label style={labelStyle}>Amount ({currencySymbol})</label>
+                                <input 
+                                    type="number" 
+                                    value={balanceAmount} 
+                                    onChange={e => setBalanceAmount(e.target.value)} 
+                                    style={inputStyle}
+                                    placeholder="0.00"
+                                    step="0.01"
+                                    min="0"
+                                    required 
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Remark (Visible in Transaction)</label>
+                                <input 
+                                    type="text" 
+                                    value={balanceNote} 
+                                    onChange={e => setBalanceNote(e.target.value)} 
+                                    style={inputStyle}
+                                    placeholder="e.g., Bonus, Correction, Penalty"
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                <button type="button" onClick={() => setIsBalanceModalOpen(false)} style={{ ...btnStyle('#718096'), flex: 1 }}>Cancel</button>
+                                <button type="submit" style={{ ...btnStyle(balanceAction === 'credit' ? '#48bb78' : '#f56565'), flex: 1 }} disabled={processingBalance}>
+                                    {processingBalance ? 'Processing...' : 'Confirm'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {showSqlModal && (
                 <div style={modalOverlayStyle}>
