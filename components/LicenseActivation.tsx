@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { LudoLogoSVG } from '../assets/icons';
 
@@ -24,6 +25,7 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
         }
 
         try {
+            // Attempt to connect to the server
             const response = await fetch(`${serverUrl}/api/activate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -47,7 +49,14 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
             }
 
         } catch (err: any) {
-            setError(err.message);
+            console.error("License Activation Error:", err);
+            
+            // Provide specific help for "Failed to fetch" (Network Error)
+            if (err.message === 'Failed to fetch' || err.message.includes('NetworkError')) {
+                setError(`Cannot connect to Licensing Server at ${serverUrl}. Please ensure the server is running and accessible.`);
+            } else {
+                setError(err.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -69,7 +78,19 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                 </div>
 
                 <form onSubmit={handleSubmit} className="auth-form">
-                    {error && <div className="auth-message error">{error}</div>}
+                    {error && (
+                        <div className="auth-message error">
+                            {error}
+                            {error.includes('Cannot connect') && (
+                                <div style={{fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'left'}}>
+                                    <strong>Troubleshooting:</strong><br/>
+                                    1. Open <code>licensing_server</code> folder terminal.<br/>
+                                    2. Run <code>npm start</code>.<br/>
+                                    3. Check if <code>LICENSE_SERVER_URL</code> in <code>App.tsx</code> matches the server URL.
+                                </div>
+                            )}
+                        </div>
+                    )}
                     
                     <div className="input-group">
                         <span className="input-icon"><IconKey /></span>

@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useGameServer } from './hooks/useGameServer';
 import Game from './components/Game';
@@ -60,7 +61,7 @@ export const AppConfigContext = React.createContext({
 
 // IMPORTANT: This should be configured by the buyer.
 // It's the URL of their self-hosted licensing server.
-const LICENSE_SERVER_URL = 'https://licensing-server-hg9l.onrender.com'; // Default for local setup
+const LICENSE_SERVER_URL = 'https://licensing-server-hg9l.onrender.com'; 
 
 function App() {
   const [isLicensed, setIsLicensed] = useState(false);
