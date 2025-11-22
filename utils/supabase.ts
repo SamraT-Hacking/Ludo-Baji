@@ -1157,4 +1157,4 @@ VALUES
   ('maintenance_mode', '{"enabled": false, "mode": "manual", "end_time": null}')
 ON CONFLICT (key) DO NOTHING;
 
-
+*/
