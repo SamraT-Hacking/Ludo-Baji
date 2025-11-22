@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../utils/supabase';
 import { HowToPlayVideo } from '../../types';
@@ -40,6 +41,15 @@ const HowToPlayManagement: React.FC = () => {
 
     useEffect(() => {
         fetchVideos();
+    }, [fetchVideos]);
+    
+    // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('admin-videos-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'how_to_play_videos' }, fetchVideos)
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [fetchVideos]);
 
     const openModal = (video: HowToPlayVideo | null = null) => {

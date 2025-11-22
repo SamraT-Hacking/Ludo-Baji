@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { supabase } from '../../utils/supabase';
 import { AppConfigContext } from '../../App';
@@ -95,6 +96,15 @@ const UserManagement: React.FC<UserManagementProps> = ({ onSelectUser }) => {
         }, 300);
         return () => clearTimeout(debounce);
     }, [fetchUsers, searchTerm, page]);
+    
+    // Realtime Subscription for user changes
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('admin-users-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchUsers())
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchUsers]);
 
     const handleCopySql = () => {
         const sql = `

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { supabase } from '../../utils/supabase';
 import { TransactionStatus } from '../../types';
@@ -125,6 +126,15 @@ const DepositManagement: React.FC = () => {
 
     useEffect(() => {
         fetchDeposits();
+    }, [fetchDeposits]);
+    
+    // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('admin-deposits-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: 'type=eq.DEPOSIT' }, fetchDeposits)
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [fetchDeposits]);
 
     // Client-side search logic (NOTE: Search only filters the currently fetched page due to complex derived data. 

@@ -19,7 +19,7 @@ const Leaderboard: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<LeaderboardPeriod>('all_time');
 
-    const fetchLeaderboard = useCallback(async (period: LeaderboardPeriod) => {
+    const fetchLeaderboard = useCallback(async () => {
         if (!supabase) {
             setError("Supabase client is not available.");
             setLoading(false);
@@ -42,11 +42,11 @@ const Leaderboard: React.FC = () => {
                 .eq('type', 'WINNINGS')
                 .eq('status', 'COMPLETED');
 
-            if (period !== 'all_time') {
+            if (activeTab !== 'all_time') {
                 const date = new Date();
-                if (period === 'weekly') {
+                if (activeTab === 'weekly') {
                     date.setDate(date.getDate() - 7);
-                } else if (period === 'monthly') {
+                } else if (activeTab === 'monthly') {
                     date.setMonth(date.getMonth() - 1);
                 }
                 transactionsQuery = transactionsQuery.gte('created_at', date.toISOString());
@@ -83,11 +83,25 @@ const Leaderboard: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [activeTab]);
 
     useEffect(() => {
-        fetchLeaderboard(activeTab);
-    }, [activeTab, fetchLeaderboard]);
+        fetchLeaderboard();
+    }, [fetchLeaderboard]);
+    
+    // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+        
+        const channel = supabase.channel('leaderboard-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchLeaderboard())
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => fetchLeaderboard())
+            .subscribe();
+            
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [fetchLeaderboard]);
     
     const tabs: { id: LeaderboardPeriod; label: string }[] = [
         { id: 'weekly', label: 'Weekly' },

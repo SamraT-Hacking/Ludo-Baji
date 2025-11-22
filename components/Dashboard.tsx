@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { View, AppConfigContext } from '../App';
 import { supabase } from '../utils/supabase';
 import { Profile } from '../types';
@@ -15,30 +15,63 @@ const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const { currencySymbol } = useContext(AppConfigContext);
     const { t } = useLanguage();
 
-    useEffect(() => {
-        const fetchUserStats = async () => {
-            if (!supabase) return;
-            const { data: { user }, error: userError } = await (supabase.auth as any).getUser();
+    const fetchUserStats = useCallback(async () => {
+        if (!supabase) return;
+        const { data: { user }, error: userError } = await (supabase.auth as any).getUser();
 
-            if (userError) {
-                console.error("Could not fetch user:", userError.message);
-            } else if (user) {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', user.id)
-                    .single();
-                
-                if (error) {
-                    console.error("Could not fetch user profile:", error.message);
-                } else if (data) {
-                    setStats(data);
-                }
+        if (userError) {
+            console.error("Could not fetch user:", userError.message);
+        } else if (user) {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+            
+            if (error) {
+                console.error("Could not fetch user profile:", error.message);
+            } else if (data) {
+                setStats(data);
             }
-            setLoading(false);
-        };
+        }
+        setLoading(false);
+    }, []);
 
+    useEffect(() => {
         fetchUserStats();
+    }, [fetchUserStats]);
+
+    // Realtime subscription
+    useEffect(() => {
+        if (!supabase) return;
+        // We need the user ID to subscribe specifically to their profile, 
+        // but since we fetch it in fetchUserStats, we can wait for stats to be populated or get user again.
+        // A generic channel for the user's profile is safer.
+        
+        const setupSubscription = async () => {
+            const { data: { user } } = await (supabase as any).auth.getUser();
+            if (!user) return;
+
+            const channel = supabase.channel('dashboard-realtime')
+                .on('postgres_changes', { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'profiles', 
+                    filter: `id=eq.${user.id}` 
+                }, (payload) => {
+                    setStats(payload.new as Profile);
+                })
+                // Subscribe to tournaments to update games played if necessary, though profiles usually hold that stat.
+                // Profile stats (wins/losses) are updated when a match ends.
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel);
+            }
+        };
+        
+        const unsub = setupSubscription();
+        return () => { unsub.then(fn => fn && fn()); };
     }, []);
     
     const headerStyle: React.CSSProperties = {

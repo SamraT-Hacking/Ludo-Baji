@@ -93,6 +93,15 @@ const NotificationsList: React.FC<NotificationsListProps> = ({ onViewNotificatio
         fetchNotifications();
     }, [fetchNotifications]);
     
+    // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('notifications-list-realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, fetchNotifications)
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchNotifications]);
+    
     const handleView = (notification: Notification) => {
         onViewNotification(notification);
     }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { supabase } from '../../utils/supabase';
 import { Transaction, TransactionStatus, TransactionType } from '../../types';
@@ -66,6 +67,15 @@ const FinancialManagement: React.FC = () => {
     useEffect(() => {
         const debounce = setTimeout(() => fetchTransactions(), 500);
         return () => clearTimeout(debounce);
+    }, [fetchTransactions]);
+    
+    // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('admin-finance-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, fetchTransactions)
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [fetchTransactions]);
 
     const StatusBadge = ({ status }: { status: TransactionStatus }) => {

@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { supabase } from '../utils/supabase';
 import { Transaction, TransactionType } from '../types';
@@ -34,6 +33,35 @@ const TransactionHistory: React.FC = () => {
 
     useEffect(() => {
         fetchTransactions();
+    }, [fetchTransactions]);
+    
+    useEffect(() => {
+        if (!supabase) return;
+        
+        const setupSubscription = async () => {
+            const { data: { user } } = await (supabase as any).auth.getUser();
+            if (!user) return;
+
+            const channel = supabase.channel('transaction-history-realtime')
+                .on('postgres_changes', { 
+                    event: 'INSERT', 
+                    schema: 'public', 
+                    table: 'transactions', 
+                    filter: `user_id=eq.${user.id}` 
+                }, fetchTransactions)
+                .on('postgres_changes', { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'transactions', 
+                    filter: `user_id=eq.${user.id}` 
+                }, fetchTransactions)
+                .subscribe();
+            
+            return () => supabase.removeChannel(channel);
+        };
+        
+        const unsub = setupSubscription();
+        return () => { unsub.then(fn => fn && fn()); };
     }, [fetchTransactions]);
 
     const headerStyle: React.CSSProperties = { fontSize: 'clamp(1.8rem, 5vw, 2.5rem)', marginBottom: '2rem', borderBottom: '1px solid #ddd', paddingBottom: '1rem' };

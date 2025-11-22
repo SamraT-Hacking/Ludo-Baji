@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { supabase } from '../utils/supabase';
 import { AppConfigContext } from '../App';
@@ -77,6 +76,15 @@ const ReferHistory: React.FC<ReferHistoryProps> = () => {
 
     useEffect(() => {
         fetchReferralHistory();
+    }, [fetchReferralHistory]);
+    
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('refer-history-realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'profiles' }, fetchReferralHistory) // New referrals
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, fetchReferralHistory) // New bonuses
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [fetchReferralHistory]);
 
     return (

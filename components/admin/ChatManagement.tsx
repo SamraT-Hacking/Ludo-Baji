@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../utils/supabase';
 import { ChatMessage } from '../../types';
@@ -49,6 +50,15 @@ const ChatManagement: React.FC = () => {
         }, 300);
         return () => clearTimeout(debounce);
     }, [fetchMessages, searchTerm, page]);
+    
+    // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('admin-chat-realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, fetchMessages)
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchMessages]);
 
     const handleDelete = async (messageId: string) => {
         if (!supabase) return;

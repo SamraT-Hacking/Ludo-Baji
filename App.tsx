@@ -187,21 +187,26 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Realtime Maintenance Mode Listener
+  // Realtime Maintenance Mode & App Config Listener
   useEffect(() => {
       if (!supabase) return;
 
-      const channel = supabase.channel('app-maintenance-updates')
+      const channel = supabase.channel('app-global-settings-updates')
           .on('postgres_changes', { 
               event: 'UPDATE', 
               schema: 'public', 
-              table: 'app_settings', 
-              filter: 'key=eq.maintenance_mode' 
+              table: 'app_settings'
           }, (payload) => {
               const newVal = payload.new as any;
-              if (newVal && newVal.value) {
+              if (newVal && newVal.key === 'maintenance_mode' && newVal.value) {
                   console.log("Maintenance mode updated:", newVal.value);
                   setMaintenanceMode(newVal.value);
+              }
+              if (newVal && newVal.key === 'app_config' && newVal.value) {
+                  setAppConfig(newVal.value);
+              }
+              if (newVal && newVal.key === 'admin_status' && newVal.value) {
+                  setAdminStatus(newVal.value.status);
               }
           })
           .subscribe();
@@ -211,7 +216,7 @@ function App() {
       };
   }, []);
 
-  // Unread Notifications Count
+  // Unread Notifications Count (Realtime)
   useEffect(() => {
       if (!supabase || !session) return;
       const fetchUnread = async () => {
@@ -227,8 +232,16 @@ function App() {
           }
       };
       fetchUnread();
-      const interval = setInterval(fetchUnread, 60000);
-      return () => clearInterval(interval);
+      
+      // Subscribe to notifications
+      const channel = supabase.channel('global-notifications-count')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, fetchUnread)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notification_read_status', filter: `user_id=eq.${session.user.id}` }, fetchUnread)
+        .subscribe();
+
+      return () => {
+          supabase.removeChannel(channel);
+      };
   }, [session]);
 
   // Theme Management

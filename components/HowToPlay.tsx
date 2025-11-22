@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../utils/supabase';
 import { HowToPlayVideo } from '../types';
 
@@ -7,28 +8,38 @@ const HowToPlay: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const fetchVideos = async () => {
-            if (!supabase) return;
-            setLoading(true);
-            setError(null);
-            try {
-                const { data, error } = await supabase
-                    .from('how_to_play_videos')
-                    .select('*')
-                    .order('created_at', { ascending: false });
+    const fetchVideos = useCallback(async () => {
+        if (!supabase) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const { data, error } = await supabase
+                .from('how_to_play_videos')
+                .select('*')
+                .order('created_at', { ascending: false });
 
-                if (error) throw error;
-                setVideos(data || []);
-            } catch (e: any) {
-                setError('Could not load video tutorials.');
-                console.error(e);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchVideos();
+            if (error) throw error;
+            setVideos(data || []);
+        } catch (e: any) {
+            setError('Could not load video tutorials.');
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchVideos();
+    }, [fetchVideos]);
+    
+    // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('how-to-play-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'how_to_play_videos' }, fetchVideos)
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchVideos]);
 
     const getYoutubeEmbedUrl = (url: string): string | null => {
         let videoId = null;

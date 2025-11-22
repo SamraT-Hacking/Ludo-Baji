@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../utils/supabase';
 import { Notification, Profile } from '../../types';
@@ -45,6 +46,15 @@ const NotificationManagement: React.FC = () => {
 
     useEffect(() => {
         fetchNotifications();
+    }, [fetchNotifications]);
+    
+    // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('admin-notifications-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, fetchNotifications)
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [fetchNotifications]);
 
     useEffect(() => {

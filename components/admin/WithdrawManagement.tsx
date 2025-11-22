@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { supabase } from '../../utils/supabase';
 import { Transaction, TransactionStatus } from '../../types';
@@ -98,6 +99,15 @@ const WithdrawManagement: React.FC = () => {
 
     useEffect(() => {
         fetchWithdrawals();
+    }, [fetchWithdrawals]);
+    
+    // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('admin-withdrawals-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: 'type=eq.WITHDRAWAL' }, fetchWithdrawals)
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [fetchWithdrawals]);
 
     // Client-side search

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../utils/supabase';
 import { View } from '../App';
@@ -19,13 +20,13 @@ const ReferLeaderboard: React.FC<ReferLeaderboardProps> = () => {
     const [error, setError] = useState<string | null>(null);
     const [activeFilter, setActiveFilter] = useState<LeaderboardPeriod>('all_time');
 
-    const fetchLeaderboard = useCallback(async (period: LeaderboardPeriod) => {
+    const fetchLeaderboard = useCallback(async () => {
         if (!supabase) return;
         setLoading(true);
         setError(null);
 
         try {
-            const { data, error: rpcError } = await supabase.rpc('get_referral_leaderboard', { period });
+            const { data, error: rpcError } = await supabase.rpc('get_referral_leaderboard', { period: activeFilter });
 
             if (rpcError) throw rpcError;
 
@@ -36,11 +37,20 @@ const ReferLeaderboard: React.FC<ReferLeaderboardProps> = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [activeFilter]);
 
     useEffect(() => {
-        fetchLeaderboard(activeFilter);
-    }, [activeFilter, fetchLeaderboard]);
+        fetchLeaderboard();
+    }, [fetchLeaderboard]);
+    
+    useEffect(() => {
+        if (!supabase) return;
+        const channel = supabase.channel('refer-leaderboard-realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'profiles' }, () => fetchLeaderboard())
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, () => fetchLeaderboard())
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchLeaderboard]);
 
     const filters: { id: LeaderboardPeriod; label: string }[] = [
         { id: 'all_time', label: 'All Time' },
