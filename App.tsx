@@ -60,6 +60,7 @@ export const AppConfigContext = React.createContext({
 // IMPORTANT: This should be configured by the buyer.
 // It's the URL of their self-hosted licensing server.
 const LICENSE_SERVER_URL = 'https://licensing-server-hg9l.onrender.com'; 
+const LICENSE_HEARTBEAT_INTERVAL = 30000; // Check license every 30 seconds
 
 function App() {
   // Optimistic license check: If token exists, assume licensed immediately to avoid loading screen.
@@ -100,13 +101,14 @@ function App() {
   const { gameState, connectionStatus, error, startGame, rollDice, movePiece, leaveGame, sendChatMessage } = useGameServer(gameCode, sessionToken);
   
   useEffect(() => {
-    const verifyLicense = async () => {
-        setLicenseError(null);
+    const checkLicenseStatus = async () => {
         try {
             const licenseToken = localStorage.getItem('license_token');
+            
+            // If no token found during a heartbeat check, lock the app immediately
             if (!licenseToken) {
                 setIsLicensed(false);
-                setCheckingLicense(false); // Stop loading if explicitly no token
+                setCheckingLicense(false);
                 return;
             }
 
@@ -123,26 +125,33 @@ function App() {
 
             if (response.ok && data.valid) {
                 setIsLicensed(true);
+                setLicenseError(null);
             } else {
-                // Only remove and redirect if server explicitly says invalid
+                // IMPORTANT: Instant Block Logic
+                // If server returns valid: false (blocked, invalid domain, etc.)
+                // We immediately clear local storage and force the UI to the Activation screen.
                 localStorage.removeItem('license_token');
                 setIsLicensed(false);
-                setLicenseError(data.message || 'License is invalid or expired.');
+                setLicenseError(data.message || 'License verification failed. Access revoked.');
             }
         } catch (err) {
-            console.error("License verification error:", err);
-            // If network error, we might want to let them through optimistically or block.
-            // For strict security, block. For UX (like offline), maybe allow if previously validated?
-            // Currently blocking if error occurs and assuming invalid if verify fails.
-            // BUT, since we initialized isLicensed=true if token exists, the user is already in the app.
-            // We only flip isLicensed to false if we get a hard failure from logic.
-            // If fetch throws (network error), we currently do nothing, so user stays in app (Optimistic).
-            // This avoids the "Verifying..." screen blocking the user on bad internet.
+            console.error("License heartbeat error:", err);
+            // Note: On network error, we generally keep the user in the app (optimistic) 
+            // to prevent blocking them during temporary internet glitches.
+            // We only block if we get an explicit rejection from the server.
         } finally {
             setCheckingLicense(false);
         }
     };
-    verifyLicense();
+
+    // Run check immediately on mount
+    checkLicenseStatus();
+
+    // Set up heartbeat interval for real-time verification
+    const intervalId = setInterval(checkLicenseStatus, LICENSE_HEARTBEAT_INTERVAL);
+
+    // Cleanup interval on unmount
+    return () => clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
@@ -621,9 +630,10 @@ function App() {
         return <LoadingScreen message="Verifying application license..." />;
     }
 
+    // If license is invalid/blocked/revoked, show activation screen regardless of route
     if (!isLicensed) {
         return <LicenseActivation 
-                    onActivationSuccess={() => setIsLicensed(true)} 
+                    onActivationSuccess={() => { setIsLicensed(true); setLicenseError(null); }} 
                     initialError={licenseError}
                     serverUrl={LICENSE_SERVER_URL} 
                />;
