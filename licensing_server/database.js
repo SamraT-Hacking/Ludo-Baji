@@ -2,19 +2,23 @@
 // licensing_server/database.js
 const { Pool } = require('pg');
 
-// Use the DATABASE_URL environment variable provided by Render
+// Use the DATABASE_URL environment variable
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
     console.error("CRITICAL ERROR: DATABASE_URL environment variable is missing.");
-    console.error("Please create a PostgreSQL database on Render and link it.");
+    console.error("Please set DATABASE_URL in your .env file or Render Environment Variables.");
     // We don't exit here to allow the script to load, but initDb will fail.
 }
 
 // Create a connection pool
+// Supabase and many cloud providers require SSL.
+// We set rejectUnauthorized to false to allow self-signed certs often used in these pools.
 const pool = new Pool({
     connectionString: connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: {
+        rejectUnauthorized: false
+    }
 });
 
 const initDb = () => {
@@ -55,7 +59,10 @@ const initDb = () => {
         .then(() => pool.query(createSettingsTable))
         .then(() => pool.query(insertDefaultSetting))
         .then(() => console.log('Database tables initialized successfully.'))
-        .catch(err => console.error('Error initializing database tables:', err));
+        .catch(err => {
+            console.error('Error initializing database tables:', err);
+            console.error('Check your DATABASE_URL. Ensure it is the "Direct Connection" string (Port 5432) if using Supabase, or ensure Transaction Mode is compatible.');
+        });
 
     return pool;
 };
