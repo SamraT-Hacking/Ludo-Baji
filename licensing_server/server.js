@@ -36,6 +36,13 @@ app.use((req, res, next) => {
 // --- Database Initialization ---
 const db = initDb();
 
+// --- Helper Functions ---
+const sanitizeDomain = (domain) => {
+    if (!domain) return '';
+    return domain.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+};
+
+
 // --- Admin Auth Middleware ---
 const adminAuth = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -59,7 +66,7 @@ app.post('/api/activate', async (req, res) => {
     }
 
     // Sanitize domain
-    domain = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    domain = sanitizeDomain(domain);
 
     try {
         const serverMode = await getSetting(db, 'server_mode') || 'live';
@@ -210,7 +217,7 @@ app.post('/api/verify', async (req, res) => {
             return res.status(403).json({ valid: false, message: 'License blocked.' });
         }
         
-        const sanitizedDomain = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+        const sanitizedDomain = sanitizeDomain(domain);
         if (foundLicense.domain && foundLicense.domain !== sanitizedDomain) {
             return res.status(403).json({ valid: false, message: 'License is not valid for this domain.' });
         }

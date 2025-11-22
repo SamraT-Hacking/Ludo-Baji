@@ -163,7 +163,7 @@ module.exports = {
     getLicenseByToken,
     getAllLicenses,
     addLicense,
-    updateLicenseTokenHash, // EXPORTED
+    updateLicenseTokenHash,
     updateLicenseStatus,
     resetLicenseDomain,
     deleteLicense,

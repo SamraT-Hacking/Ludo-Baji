@@ -19,6 +19,7 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
         const sanitized = e.target.value
             .toLowerCase()
             .replace(/^https?:\/\//, '') // Remove http/https
+            .replace(/^www\./, '') // Remove www.
             .replace(/\/$/, ''); // Remove trailing slash
         setDomain(sanitized);
     };
