@@ -1,3 +1,4 @@
+
 # CodeCanyon Product Licensing Server
 
 This server is required to activate and validate your purchase of the script. It connects to the official Envato API to verify purchase codes and locks each license to a single domain to prevent unauthorized redistribution.
@@ -60,6 +61,26 @@ npm start
 ```
 
 You should see the message: `Licensing server running on http://localhost:4000`.
+
+---
+
+## 💾 Data Persistence (Important for Render users)
+
+**Why is my data lost on deploy?**
+Render (and similar cloud platforms) use ephemeral file systems. This means every time you redeploy, the disk is wiped, deleting the `licenses.db` file.
+
+**How to fix it:**
+1.  In your Render Service settings, click on the **Disks** tab.
+2.  Click **Add Disk**.
+3.  **Name**: `license_data` (or any name).
+4.  **Mount Path**: `/var/data`.
+5.  **Size**: 1 GB is sufficient.
+6.  Go to the **Environment** tab.
+7.  Add a new Environment Variable:
+    *   **Key**: `DB_PATH`
+    *   **Value**: `/var/data/licenses.db`
+
+This configuration tells the server to save the database on the persistent disk instead of the temporary folder, ensuring your license data survives deployments and restarts.
 
 ---
 

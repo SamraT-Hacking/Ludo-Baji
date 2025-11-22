@@ -1,8 +1,13 @@
 
 // licensing_server/database.js
 const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 
-const DB_SOURCE = "licenses.db";
+// Allow overriding DB path via environment variable (Essential for Render Persistent Disks)
+// Default to 'licenses.db' in the current directory if not specified.
+const DB_SOURCE = process.env.DB_PATH || path.resolve(__dirname, "licenses.db");
+
+console.log(`Using database file at: ${DB_SOURCE}`);
 
 let db = new sqlite3.Database(DB_SOURCE, (err) => {
     if (err) {
