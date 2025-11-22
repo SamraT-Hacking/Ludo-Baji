@@ -17,10 +17,6 @@ const ENVATO_TOKEN = process.env.ENVATO_PERSONAL_TOKEN;
 const ITEM_ID = process.env.CODECANYON_ITEM_ID;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 
-// A secret token that the game server needs to run logic
-// In production, this could be dynamic or rotated.
-const SERVER_SECRET_TOKEN = "DREAM-LUDO-SECURE-LOGIC-KEY-V1";
-
 if (!ENVATO_TOKEN || !ITEM_ID) {
     console.error("FATAL ERROR: ENVATO_PERSONAL_TOKEN and CODECANYON_ITEM_ID must be set in the .env file.");
     process.exit(1);
@@ -93,48 +89,6 @@ app.post('/api/check-domain', async (req, res) => {
     } catch (error) {
         console.error("Check domain error:", error);
         return res.status(500).json({ active: false, error: 'Server error' });
-    }
-});
-
-// NEW: Server-Side Verification Endpoint
-// This is called by the Game Server (Node.js) not the Frontend
-app.post('/api/verify-server-license', async (req, res) => {
-    let { purchase_code, domain } = req.body;
-
-    if (!purchase_code) {
-        return res.status(400).json({ active: false, message: 'Purchase code required' });
-    }
-
-    const cleanDomain = sanitizeDomain(domain);
-
-    try {
-        const license = await getLicenseByCode(db, purchase_code);
-
-        if (!license) {
-            return res.json({ active: false, message: 'License not found' });
-        }
-
-        if (license.status !== 'active') {
-            return res.json({ active: false, message: 'License is blocked' });
-        }
-
-        // Domain check (Loose check if domain is not set yet, strict if set)
-        if (license.domain && license.domain !== cleanDomain) {
-             // Allow localhost for dev testing even if locked to production
-             if (cleanDomain !== 'localhost' && cleanDomain !== '127.0.0.1') {
-                 return res.json({ active: false, message: 'Domain mismatch' });
-             }
-        }
-
-        // Return the Secret Key needed for game logic
-        return res.json({ 
-            active: true, 
-            secret_key: SERVER_SECRET_TOKEN 
-        });
-
-    } catch (error) {
-        console.error("Server verification error:", error);
-        return res.status(500).json({ active: false, message: 'Internal Error' });
     }
 });
 
