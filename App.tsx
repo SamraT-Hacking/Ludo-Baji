@@ -60,12 +60,11 @@ export const AppConfigContext = React.createContext({
 // IMPORTANT: This should be configured by the buyer.
 // It's the URL of their self-hosted licensing server.
 const LICENSE_SERVER_URL = 'https://licensing-server-hg9l.onrender.com'; 
-const LICENSE_HEARTBEAT_INTERVAL = 30000; // Check license every 30 seconds
 
 function App() {
-  // Optimistic license check: If token exists, assume licensed immediately to avoid loading screen.
-  const [isLicensed, setIsLicensed] = useState(() => !!localStorage.getItem('license_token'));
-  const [checkingLicense, setCheckingLicense] = useState(!localStorage.getItem('license_token'));
+  // State for license check
+  const [isLicensed, setIsLicensed] = useState(false);
+  const [checkingLicense, setCheckingLicense] = useState(true);
   const [licenseError, setLicenseError] = useState<string | null>(null);
 
   const [theme, setTheme] = useState<ThemeName>('classic');
@@ -100,58 +99,41 @@ function App() {
 
   const { gameState, connectionStatus, error, startGame, rollDice, movePiece, leaveGame, sendChatMessage } = useGameServer(gameCode, sessionToken);
   
+  // License Check on Mount
   useEffect(() => {
-    const checkLicenseStatus = async () => {
+    const checkDomainLicense = async () => {
         try {
-            const licenseToken = localStorage.getItem('license_token');
+            const currentDomain = window.location.hostname;
+            // Skip check for localhost dev if you want, but user asked for strict system.
+            // We will check against the server.
             
-            // If no token found during a heartbeat check, lock the app immediately
-            if (!licenseToken) {
-                setIsLicensed(false);
-                setCheckingLicense(false);
-                return;
-            }
-
-            const response = await fetch(`${LICENSE_SERVER_URL}/api/verify`, {
+            const response = await fetch(`${LICENSE_SERVER_URL}/api/check-domain`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    license_token: licenseToken,
-                    domain: window.location.hostname || 'localhost'
-                }),
+                body: JSON.stringify({ domain: currentDomain })
             });
 
             const data = await response.json();
 
-            if (response.ok && data.valid) {
+            if (response.ok && data.active) {
                 setIsLicensed(true);
                 setLicenseError(null);
             } else {
-                // IMPORTANT: Instant Block Logic
-                // If server returns valid: false (blocked, invalid domain, etc.)
-                // We immediately clear local storage and force the UI to the Activation screen.
-                localStorage.removeItem('license_token');
                 setIsLicensed(false);
-                setLicenseError(data.message || 'License verification failed. Access revoked.');
+                setLicenseError(data.message || 'This domain is not activated.');
             }
         } catch (err) {
-            console.error("License heartbeat error:", err);
-            // Note: On network error, we generally keep the user in the app (optimistic) 
-            // to prevent blocking them during temporary internet glitches.
-            // We only block if we get an explicit rejection from the server.
+            console.error("License check error:", err);
+            // If network fails, we default to blocked to ensure security,
+            // or show a "Connecting..." state. Here we block and show error.
+            setIsLicensed(false);
+            setLicenseError("Cannot connect to license server.");
         } finally {
             setCheckingLicense(false);
         }
     };
 
-    // Run check immediately on mount
-    checkLicenseStatus();
-
-    // Set up heartbeat interval for real-time verification
-    const intervalId = setInterval(checkLicenseStatus, LICENSE_HEARTBEAT_INTERVAL);
-
-    // Cleanup interval on unmount
-    return () => clearInterval(intervalId);
+    checkDomainLicense();
   }, []);
 
   useEffect(() => {
@@ -627,10 +609,10 @@ function App() {
 
   const renderContent = () => {
     if (checkingLicense) {
-        return <LoadingScreen message="Verifying application license..." />;
+        return <LoadingScreen message="Connecting..." />; 
     }
 
-    // If license is invalid/blocked/revoked, show activation screen regardless of route
+    // If license is not active, show activation screen
     if (!isLicensed) {
         return <LicenseActivation 
                     onActivationSuccess={() => { setIsLicensed(true); setLicenseError(null); }} 

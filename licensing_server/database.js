@@ -1,3 +1,4 @@
+
 // licensing_server/database.js
 const sqlite3 = require('sqlite3').verbose();
 
@@ -17,7 +18,7 @@ let db = new sqlite3.Database(DB_SOURCE, (err) => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 purchase_code TEXT UNIQUE NOT NULL,
                 domain TEXT,
-                license_token_hash TEXT NOT NULL,
+                license_token_hash TEXT,
                 item_name TEXT,
                 buyer TEXT,
                 license_type TEXT,
@@ -57,12 +58,13 @@ const getLicenseByCode = (db, code) => {
     });
 };
 
-const getLicenseByToken = (db) => {
+// NEW: Check license by domain (for global activation check)
+const getLicenseByDomain = (db, domain) => {
     return new Promise((resolve, reject) => {
-        const sql = "SELECT * FROM licenses";
-        db.all(sql, [], (err, rows) => {
+        const sql = "SELECT * FROM licenses WHERE domain = ?";
+        db.get(sql, [domain], (err, row) => {
             if (err) reject(err);
-            resolve(rows);
+            resolve(row);
         });
     });
 };
@@ -91,16 +93,6 @@ const addLicense = (db, license) => {
         db.run(sql, params, function(err) {
             if (err) reject(err);
             resolve({ id: this.lastID });
-        });
-    });
-};
-
-const updateLicenseTokenHash = (db, purchaseCode, newHash) => {
-    return new Promise((resolve, reject) => {
-        const sql = "UPDATE licenses SET license_token_hash = ? WHERE purchase_code = ?";
-        db.run(sql, [newHash, purchaseCode], function(err) {
-            if (err) reject(err);
-            resolve({ changes: this.changes });
         });
     });
 };
@@ -160,10 +152,9 @@ const updateSetting = (db, key, value) => {
 module.exports = {
     initDb: () => db,
     getLicenseByCode,
-    getLicenseByToken,
+    getLicenseByDomain,
     getAllLicenses,
     addLicense,
-    updateLicenseTokenHash,
     updateLicenseStatus,
     resetLicenseDomain,
     deleteLicense,

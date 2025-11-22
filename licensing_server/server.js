@@ -1,3 +1,4 @@
+
 // licensing_server/server.js
 require('dotenv').config();
 const express = require('express');
@@ -5,8 +6,8 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { 
-    initDb, getLicenseByCode, getLicenseByToken, getAllLicenses, 
-    addLicense, updateLicenseTokenHash, updateLicenseStatus, resetLicenseDomain, 
+    initDb, getLicenseByCode, getLicenseByDomain, getAllLicenses, 
+    addLicense, updateLicenseStatus, resetLicenseDomain, 
     deleteLicense, getSetting, updateSetting
 } = require('./database');
 
@@ -28,8 +29,12 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Logging
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    if (req.method === 'POST') {
+        console.log('Body:', JSON.stringify(req.body));
+    }
     next();
 });
 
@@ -39,9 +44,12 @@ const db = initDb();
 // --- Helper Functions ---
 const sanitizeDomain = (domain) => {
     if (!domain) return '';
-    return domain.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+    return domain.toLowerCase()
+        .replace(/^https?:\/\//, '')
+        .replace(/^www\./, '')
+        .replace(/\/$/, '')
+        .split(':')[0]; // Remove port if present
 };
-
 
 // --- Admin Auth Middleware ---
 const adminAuth = (req, res, next) => {
@@ -58,6 +66,33 @@ app.get('/', (req, res) => {
     res.send('Licensing Server is running.');
 });
 
+// Check if a domain is active (Public Endpoint called by App.tsx)
+app.post('/api/check-domain', async (req, res) => {
+    let { domain } = req.body;
+    if (!domain) return res.json({ active: false, message: 'No domain provided' });
+
+    const cleanDomain = sanitizeDomain(domain);
+    console.log(`Checking domain: ${cleanDomain}`);
+
+    try {
+        const license = await getLicenseByDomain(db, cleanDomain);
+        
+        if (license) {
+            if (license.status === 'active') {
+                return res.json({ active: true });
+            } else {
+                return res.json({ active: false, message: 'License is blocked.' });
+            }
+        }
+
+        return res.json({ active: false, message: 'No license found for this domain.' });
+    } catch (error) {
+        console.error("Check domain error:", error);
+        return res.status(500).json({ active: false, error: 'Server error' });
+    }
+});
+
+// Activate a license
 app.post('/api/activate', async (req, res) => {
     let { purchase_code, domain } = req.body;
 
@@ -74,53 +109,49 @@ app.post('/api/activate', async (req, res) => {
         
         // --- TEST MODE LOGIC ---
         if (isTestMode) {
-            if (purchase_code === 'TEST-CODE') {
-                return res.status(200).json({
-                    message: 'Test Activation Successful (Dev Bypass)',
-                    license_token: 'TEST-TOKEN-FOR-DEVELOPMENT'
-                });
-            }
-
             if (purchase_code.startsWith('MOCK-')) {
                 const existing = await getLicenseByCode(db, purchase_code);
                 
-                // --- FIX: Re-issue token for existing MOCK activations ---
+                // If already active on this domain, just succeed
                 if (existing) {
                     if (existing.domain && existing.domain !== domain) {
-                        return res.status(403).json({ message: `Mock license is already active on: ${existing.domain}` });
+                        return res.status(403).json({ message: `Mock license is already active on a different domain: ${existing.domain}` });
                     }
-                    const newMockToken = uuidv4();
-                    const newHashedToken = await bcrypt.hash(newMockToken, 10);
-                    await updateLicenseTokenHash(db, purchase_code, newHashedToken);
-                    return res.status(200).json({ 
-                        message: 'Mock License re-activated.', 
-                        license_token: newMockToken
-                    });
+                    // Same domain, same code -> Success
+                    return res.status(200).json({ message: 'Mock License verified.', active: true });
                 }
 
-                const mockLicenseToken = uuidv4();
-                const hashedToken = await bcrypt.hash(mockLicenseToken, 10);
+                // New Mock Activation
                 const newLicense = {
-                    purchase_code, domain, license_token_hash: hashedToken,
+                    purchase_code, domain, license_token_hash: 'MOCK-HASH',
                     item_name: "Mock Product (Test Mode)", buyer: "Mock Buyer",
                     license_type: "Regular License (Mock)",
                     supported_until: new Date(Date.now() + 365*24*60*60*1000).toISOString(),
                     activated_at: new Date().toISOString(),
                 };
                 await addLicense(db, newLicense);
-                return res.status(200).json({
-                    message: 'Mock Activation Successful! (Test Mode)',
-                    license_token: mockLicenseToken
-                });
+                return res.status(200).json({ message: 'Mock Activation Successful!', active: true });
             }
         }
 
         // --- STANDARD VALIDATION FLOW ---
         const localRecord = await getLicenseByCode(db, purchase_code);
+        
+        // 1. Check Block Status
         if (localRecord && localRecord.status === 'blocked') {
             return res.status(403).json({ message: 'This license has been blocked by the administrator.' });
         }
 
+        // 2. Check Domain Lock (Local)
+        if (localRecord && localRecord.domain) {
+            if (localRecord.domain !== domain) {
+                return res.status(403).json({ message: `This purchase code is already active on another domain: ${localRecord.domain}. Please use the Admin Panel to reset it if you moved domains.` });
+            }
+            // Same domain, same code -> Success (Re-activation scenario)
+            return res.status(200).json({ message: 'License verified successfully.', active: true });
+        }
+
+        // 3. Verify with Envato (Only if not found locally or no domain set)
         const envatoUrl = `https://api.envato.com/v3/market/author/sale?code=${purchase_code}`;
         const response = await fetch(envatoUrl, {
             headers: { 'Authorization': `Bearer ${ENVATO_TOKEN}` }
@@ -131,7 +162,7 @@ app.post('/api/activate', async (req, res) => {
             const description = errorData.description || 'Unknown error';
             if (description.includes('No sale belonging to the current user')) {
                 return res.status(404).json({ 
-                    message: `Envato Verification Failed. \n\nReason: The API could not find a sale for this code in your account.\n\nNote: You can only verify codes for items YOU SOLD as an author. You cannot verify items you BOUGHT from others.` 
+                    message: `Envato Verification Failed. The API could not find a sale for this code in your account.` 
                 });
             }
             return res.status(401).json({ message: `Envato API Error: ${description}` });
@@ -143,90 +174,22 @@ app.post('/api/activate', async (req, res) => {
             return res.status(400).json({ message: 'This purchase code is for a different product.' });
         }
 
-        // --- CORE FIX: Handle existing licenses and re-issue token ---
-        if (localRecord) {
-            if (localRecord.domain && localRecord.domain !== domain) {
-                return res.status(403).json({ message: `This purchase code is already active on another domain: ${localRecord.domain}` });
-            }
-            
-            // Re-issue a new token for the user.
-            const newLicenseToken = uuidv4();
-            const newHashedToken = await bcrypt.hash(newLicenseToken, 10);
-            await updateLicenseTokenHash(db, purchase_code, newHashedToken);
-
-            return res.status(200).json({ 
-                message: 'License re-activated successfully.', 
-                license_token: newLicenseToken 
-            });
-        }
-
-        // New Activation
-        const licenseToken = uuidv4();
-        const hashedToken = await bcrypt.hash(licenseToken, 10);
+        // 4. Save New Activation
         const newLicense = {
-            purchase_code, domain, license_token_hash: hashedToken,
+            purchase_code, domain, license_token_hash: 'LIVE-HASH', // Placeholder, checking logic now relies on DB lookup
             item_name: sale.item.name, buyer: sale.buyer, license_type: sale.license,
             supported_until: sale.supported_until, activated_at: new Date().toISOString(),
         };
         await addLicense(db, newLicense);
         
         res.status(200).json({
-            message: `Activation successful! (${isTestMode ? 'Test Mode' : 'Live'})`,
-            license_token: licenseToken
+            message: `Activation successful! Domain ${domain} is now active forever.`,
+            active: true
         });
 
     } catch (error) {
         console.error('Activation Exception:', error);
         res.status(500).json({ message: 'An internal server error occurred during activation.' });
-    }
-});
-
-
-app.post('/api/verify', async (req, res) => {
-    const { license_token, domain } = req.body;
-
-    if (!license_token || !domain) {
-        return res.status(400).json({ valid: false, message: 'License token and domain are required.' });
-    }
-
-    if (license_token === 'TEST-TOKEN-FOR-DEVELOPMENT') {
-        const serverMode = await getSetting(db, 'server_mode');
-        if (serverMode === 'test') {
-            return res.status(200).json({ valid: true, message: 'Valid Test Token' });
-        } else {
-            return res.status(401).json({ valid: false, message: 'Test tokens are not allowed in Live mode.' });
-        }
-    }
-
-    try {
-        const licenses = await getLicenseByToken(db);
-        let foundLicense = null;
-        for (const license of licenses) {
-            const match = await bcrypt.compare(license_token, license.license_token_hash);
-            if (match) {
-                foundLicense = license;
-                break;
-            }
-        }
-        
-        if (!foundLicense) {
-            return res.status(401).json({ valid: false, message: 'Invalid license token.' });
-        }
-
-        if (foundLicense.status === 'blocked') {
-            return res.status(403).json({ valid: false, message: 'License blocked.' });
-        }
-        
-        const sanitizedDomain = sanitizeDomain(domain);
-        if (foundLicense.domain && foundLicense.domain !== sanitizedDomain) {
-            return res.status(403).json({ valid: false, message: 'License is not valid for this domain.' });
-        }
-
-        res.status(200).json({ valid: true, message: 'License is valid.' });
-
-    } catch (error) {
-        console.error('Verification Error:', error);
-        res.status(500).json({ valid: false, message: 'An internal server error occurred during verification.' });
     }
 });
 
@@ -244,11 +207,7 @@ app.post('/api/admin/login', (req, res) => {
 app.get('/api/admin/licenses', adminAuth, async (req, res) => {
     try {
         const licenses = await getAllLicenses(db);
-        const safeLicenses = licenses.map(l => {
-            const { license_token_hash, ...rest } = l;
-            return rest;
-        });
-        res.json(safeLicenses);
+        res.json(licenses);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

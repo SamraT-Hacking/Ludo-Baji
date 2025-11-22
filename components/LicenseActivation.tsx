@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { LudoLogoSVG } from '../assets/icons';
 
@@ -9,19 +10,15 @@ interface LicenseActivationProps {
 
 const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSuccess, initialError, serverUrl }) => {
     const [purchaseCode, setPurchaseCode] = useState('');
-    // Default to current hostname, but allow user to edit it
-    const [domain, setDomain] = useState(window.location.hostname || ''); 
+    // Domain is auto-detected and should ideally be read-only to ensure validity
+    const [domain, setDomain] = useState(window.location.hostname || 'localhost'); 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(initialError);
 
+    // We allow editing domain only if it's empty (rare) or localhost, otherwise it's safer to lock it
+    // But for flexibility in setup, we allow editing but default to hostname
     const handleDomainChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // Sanitize domain input to prevent common user errors
-        const sanitized = e.target.value
-            .toLowerCase()
-            .replace(/^https?:\/\//, '') // Remove http/https
-            .replace(/^www\./, '') // Remove www.
-            .replace(/\/$/, ''); // Remove trailing slash
-        setDomain(sanitized);
+        setDomain(e.target.value);
     };
 
     const handleSubmit = async (event: React.FormEvent) => {
@@ -36,42 +33,40 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
         }
 
         if (!domain.trim()) {
-            setError('Please enter the domain where this product is installed.');
+            setError('Domain is required.');
             setLoading(false);
             return;
         }
 
         try {
-            // Attempt to connect to the server
             const response = await fetch(`${serverUrl}/api/activate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    purchase_code: purchaseCode,
-                    domain: domain.trim() // Send the sanitized domain
+                    purchase_code: purchaseCode.trim(),
+                    domain: domain.trim()
                 })
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.message || 'An unknown error occurred.');
+                throw new Error(data.message || 'Activation failed.');
             }
 
-            // The server now ALWAYS returns a valid token on success (new or re-issued).
-            if (data.license_token) {
-                localStorage.setItem('license_token', data.license_token);
+            // On success, we simply notify the parent App.
+            // The App will re-check domain status and unlock.
+            // No local token storage needed.
+            if (data.active) {
                 onActivationSuccess();
             } else {
-                throw new Error('Server did not return a valid license token.');
+                throw new Error('Server returned inactive status.');
             }
 
         } catch (err: any) {
-            console.error("License Activation Error:", err);
-            
-            // Provide specific help for "Failed to fetch" (Network Error)
+            console.error("Activation Error:", err);
             if (err.message === 'Failed to fetch' || err.message.includes('NetworkError')) {
-                setError(`Cannot connect to Licensing Server at ${serverUrl}. Please ensure the server is running and accessible.`);
+                setError(`Cannot connect to Licensing Server at ${serverUrl}.`);
             } else {
                 setError(err.message);
             }
@@ -100,21 +95,13 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                 <div className="auth-header">
                     <div className="auth-logo" dangerouslySetInnerHTML={{ __html: LudoLogoSVG(48) }} />
                     <h1>Activate Your Product</h1>
-                    <p>Please enter your CodeCanyon purchase code and domain to activate.</p>
+                    <p>One-time activation for <strong>{domain}</strong>. Once active, all users can access the site.</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="auth-form">
                     {error && (
                         <div className="auth-message error">
                             {error}
-                            {error.includes('Cannot connect') && (
-                                <div style={{fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'left'}}>
-                                    <strong>Troubleshooting:</strong><br/>
-                                    1. Open <code>licensing_server</code> folder terminal.<br/>
-                                    2. Run <code>npm start</code>.<br/>
-                                    3. Check if <code>LICENSE_SERVER_URL</code> in <code>App.tsx</code> matches the server URL.
-                                </div>
-                            )}
                         </div>
                     )}
                     
@@ -134,11 +121,11 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                         <span className="input-icon"><IconGlobe /></span>
                         <input
                             type="text"
-                            placeholder="Domain (e.g. yoursite.com)"
                             value={domain}
-                            onChange={handleDomainChange}
-                            required
+                            readOnly
+                            title="This is auto-detected. Install on the correct domain to proceed."
                             className="auth-input"
+                            style={{ backgroundColor: '#f0f0f0', cursor: 'not-allowed' }}
                         />
                     </div>
 
