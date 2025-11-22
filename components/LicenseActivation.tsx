@@ -57,8 +57,14 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                 throw new Error(data.message || 'An unknown error occurred.');
             }
 
-            if (data.license_token) {
+            // FIX: Handle the different success responses
+            if (data.license_token && data.license_token !== 'EXISTING_ACTIVATION') {
+                // This is a new, valid token. Save it.
                 localStorage.setItem('license_token', data.license_token);
+                onActivationSuccess();
+            } else if (data.license_token === 'EXISTING_ACTIVATION') {
+                // The server confirmed an existing activation. The token is already in local storage.
+                // We can just call success to dismiss the activation screen.
                 onActivationSuccess();
             } else {
                 throw new Error('Server did not return a valid license token.');

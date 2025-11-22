@@ -101,7 +101,7 @@ app.post('/api/activate', async (req, res) => {
                 if (existing) {
                      return res.status(200).json({ 
                         message: 'Mock License active (Already Existed).', 
-                        license_token: existing.license_token_hash 
+                        license_token: "EXISTING_ACTIVATION" // FIX: Send a signal, not the hash.
                     });
                 }
 
