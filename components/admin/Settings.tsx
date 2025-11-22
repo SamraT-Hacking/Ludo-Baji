@@ -25,6 +25,12 @@ interface DepositGatewaySettings {
     };
 }
 
+interface HomePageConfig {
+    about_image: string;
+    screenshots: string[];
+    avatars: string[];
+}
+
 // --- Rich Text Editor Component ---
 interface RichTextEditorProps {
     initialValue: string;
@@ -157,6 +163,15 @@ const Settings: React.FC = () => {
     const [securitySettings, setSecuritySettings] = useState({ enabled: false, apiKey: '' });
     const [savingSecurity, setSavingSecurity] = useState(false);
 
+    // Home Page Config
+    const [homePageConfig, setHomePageConfig] = useState<HomePageConfig>({
+        about_image: '',
+        screenshots: Array(6).fill(''),
+        avatars: Array(3).fill('')
+    });
+    const [savingHomePage, setSavingHomePage] = useState(false);
+    const [uploadingHomeAsset, setUploadingHomeAsset] = useState<string | null>(null);
+
 
     const fetchSettings = useCallback(async () => {
         if (!supabase) return;
@@ -217,6 +232,17 @@ const Settings: React.FC = () => {
 
             const fetchedSecuritySettings = getSetting('fingerprintjs_settings', { enabled: false, apiKey: '' });
             setSecuritySettings(fetchedSecuritySettings);
+
+            const homeConfig = getSetting('home_page_config', { about_image: '', screenshots: [], avatars: [] });
+            setHomePageConfig({
+                about_image: homeConfig.about_image || '',
+                screenshots: Array.isArray(homeConfig.screenshots) && homeConfig.screenshots.length === 6 
+                    ? homeConfig.screenshots 
+                    : Array(6).fill(''),
+                avatars: Array.isArray(homeConfig.avatars) && homeConfig.avatars.length === 3
+                    ? homeConfig.avatars
+                    : Array(3).fill('')
+            });
 
 
         } catch (e: any) {
@@ -524,6 +550,60 @@ const Settings: React.FC = () => {
         }
     };
 
+    // Home Page Asset Upload Helper
+    const uploadHomeAsset = async (file: File, type: 'about' | 'screenshot' | 'avatar', index?: number) => {
+        if (!supabase) return;
+        const uploadKey = `${type}-${index !== undefined ? index : ''}`;
+        setUploadingHomeAsset(uploadKey);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${type}_${Date.now()}_${index !== undefined ? index : ''}.${fileExt}`;
+            
+            const { error: uploadError } = await supabase.storage
+                .from('landing-page-assets')
+                .upload(fileName, file);
+            
+            if (uploadError) throw uploadError;
+            
+            const { data } = supabase.storage.from('landing-page-assets').getPublicUrl(fileName);
+            const url = data.publicUrl;
+
+            setHomePageConfig(prev => {
+                const newData = { ...prev };
+                if (type === 'about') newData.about_image = url;
+                if (type === 'screenshot' && index !== undefined) newData.screenshots[index] = url;
+                if (type === 'avatar' && index !== undefined) newData.avatars[index] = url;
+                return newData;
+            });
+
+        } catch (e: any) {
+            console.error("Upload failed:", e);
+            alert("Failed to upload image.");
+        } finally {
+            setUploadingHomeAsset(null);
+        }
+    };
+
+    const handleSaveHomePage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!supabase) return;
+        setSavingHomePage(true);
+        setMessage(null);
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({ key: 'home_page_config', value: homePageConfig });
+
+            if (error) throw error;
+            setMessage({ type: 'success', text: 'Home page design updated!' });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (e: any) {
+            setMessage({ type: 'error', text: `Error saving home config: ${e.message}` });
+        } finally {
+            setSavingHomePage(false);
+        }
+    };
+
     // Styles
     const headerStyle: React.CSSProperties = { fontSize: '2rem', marginBottom: '2rem' };
     const containerStyle: React.CSSProperties = { backgroundColor: 'var(--bg-card)', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.05)', marginBottom: '1.5rem', border: '1px solid var(--border-color)' };
@@ -543,6 +623,8 @@ const Settings: React.FC = () => {
     const activeTabButtonStyle: React.CSSProperties = { color: 'var(--text-main)', fontWeight: 600, borderBottom: '3px solid #4299e1' };
     const methodCardStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '0.5rem' };
     const methodLogoStyle: React.CSSProperties = { width: '40px', height: '40px', objectFit: 'contain', marginRight: '1rem', borderRadius: '4px', backgroundColor: '#f7fafc' };
+    const imgPreviewStyle: React.CSSProperties = { width: '100%', height: '150px', objectFit: 'cover', borderRadius: '6px', marginTop: '0.5rem', backgroundColor: '#f0f0f0' };
+    const imgInputContainerStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.5rem' };
 
     const TABS: { id: Tab; label: string }[] = [
         { id: 'setups', label: 'App Setups' },
@@ -622,6 +704,74 @@ const Settings: React.FC = () => {
                             </div>
                             <button type="submit" style={buttonStyle} disabled={savingConfig || loading}>
                                 {savingConfig ? 'Saving...' : 'Save Configuration'}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Home Page Design */}
+                    <div style={containerStyle}>
+                        <form onSubmit={handleSaveHomePage}>
+                            <label style={labelStyle}>Home Page Design</label>
+                            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1.5rem' }}>Manage the images displayed on the landing page.</p>
+                            
+                            {/* About Image */}
+                            <div style={{ marginBottom: '2rem' }}>
+                                <label style={{fontSize: '1rem', fontWeight: 600, display: 'block', marginBottom: '0.5rem'}}>About Section Image</label>
+                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                                    <img src={homePageConfig.about_image || 'https://via.placeholder.com/300'} alt="About" style={{ width: '150px', height: '150px', objectFit: 'cover', borderRadius: '8px', backgroundColor: '#eee' }} />
+                                    <div style={imgInputContainerStyle}>
+                                        <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && uploadHomeAsset(e.target.files[0], 'about')} disabled={!!uploadingHomeAsset} />
+                                        <small style={{color: '#666'}}>{uploadingHomeAsset === 'about-' ? 'Uploading...' : 'Recommended: 600x600px'}</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* App Screenshots */}
+                            <div style={{ marginBottom: '2rem' }}>
+                                <label style={{fontSize: '1rem', fontWeight: 600, display: 'block', marginBottom: '0.5rem'}}>App Screenshots (6 slots)</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '1rem' }}>
+                                    {homePageConfig.screenshots.map((src, idx) => (
+                                        <div key={idx} style={{ border: '1px solid #eee', padding: '0.5rem', borderRadius: '8px' }}>
+                                            <img src={src || 'https://via.placeholder.com/150'} alt={`Screen ${idx + 1}`} style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '4px', backgroundColor: '#eee' }} />
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                style={{ fontSize: '0.7rem', width: '100%', marginTop: '0.5rem' }}
+                                                onChange={e => e.target.files?.[0] && uploadHomeAsset(e.target.files[0], 'screenshot', idx)}
+                                                disabled={!!uploadingHomeAsset}
+                                            />
+                                            <div style={{fontSize: '0.7rem', textAlign: 'center', color: uploadingHomeAsset === `screenshot-${idx}` ? 'blue' : '#666'}}>
+                                                {uploadingHomeAsset === `screenshot-${idx}` ? 'Uploading...' : `Slot ${idx + 1}`}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Client Avatars */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{fontSize: '1rem', fontWeight: 600, display: 'block', marginBottom: '0.5rem'}}>Client Testimonial Avatars (3 slots)</label>
+                                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                    {homePageConfig.avatars.map((src, idx) => (
+                                        <div key={idx} style={{ border: '1px solid #eee', padding: '0.5rem', borderRadius: '8px', width: '120px' }}>
+                                            <img src={src || 'https://via.placeholder.com/150'} alt={`Client ${idx + 1}`} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '50%', backgroundColor: '#eee' }} />
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                style={{ fontSize: '0.7rem', width: '100%', marginTop: '0.5rem' }}
+                                                onChange={e => e.target.files?.[0] && uploadHomeAsset(e.target.files[0], 'avatar', idx)}
+                                                disabled={!!uploadingHomeAsset}
+                                            />
+                                            <div style={{fontSize: '0.7rem', textAlign: 'center', color: uploadingHomeAsset === `avatar-${idx}` ? 'blue' : '#666'}}>
+                                                {uploadingHomeAsset === `avatar-${idx}` ? 'Uploading...' : `Client ${idx + 1}`}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <button type="submit" style={buttonStyle} disabled={savingHomePage || loading}>
+                                {savingHomePage ? 'Saving...' : 'Save Home Page Design'}
                             </button>
                         </form>
                     </div>

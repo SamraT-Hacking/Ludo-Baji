@@ -1,5 +1,8 @@
-import React from 'react';
+
+import React, { useState, useEffect, useContext } from 'react';
 import { LudoLogoSVG } from '../assets/icons';
+import { AppConfigContext } from '../App';
+import { supabase } from '../utils/supabase';
 
 // --- SVG Icons for Landing Page ---
 const TournamentIcon = () => (
@@ -36,18 +39,40 @@ const socialIcons = {
     linkedin: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>`
 }
 
-
 interface HomeProps {
     onNavigateToLogin: () => void;
 }
 
 const Home: React.FC<HomeProps> = ({ onNavigateToLogin }) => {
+    const { appTitle } = useContext(AppConfigContext);
+    const [images, setImages] = useState({
+        about_image: 'https://i.imgur.com/PhJByIb.jpeg',
+        screenshots: Array.from({ length: 6 }).map((_, i) => `https://picsum.photos/400/800?random=${i+1}`),
+        avatars: Array.from({ length: 3 }).map((_, i) => `https://i.pravatar.cc/150?u=a042581f4e29026704${String.fromCharCode(100+i)}`)
+    });
+
+    useEffect(() => {
+        if (!supabase) return;
+        const fetchImages = async () => {
+            const { data } = await supabase.from('app_settings').select('value').eq('key', 'home_page_config').single();
+            if (data && data.value) {
+                const config = data.value as any;
+                setImages(prev => ({
+                    about_image: config.about_image || prev.about_image,
+                    screenshots: config.screenshots && config.screenshots.length === 6 ? config.screenshots : prev.screenshots,
+                    avatars: config.avatars && config.avatars.length === 3 ? config.avatars : prev.avatars
+                }));
+            }
+        };
+        fetchImages();
+    }, []);
+
     return (
         <div className="landing-page-container">
             <header className="landing-header">
                 <a href="#home" className="logo">
                     <div dangerouslySetInnerHTML={{ __html: LudoLogoSVG(36) }} />
-                    <span className="logo-title">Dream Ludo</span>
+                    <span className="logo-title">{appTitle}</span>
                 </a>
                 <nav className="main-nav">
                     <a href="#home">Home</a>
@@ -72,11 +97,11 @@ const Home: React.FC<HomeProps> = ({ onNavigateToLogin }) => {
                 <section id="about" className="about-section">
                     <div className="about-content">
                         <div className="about-image">
-                            <img src="https://i.imgur.com/PhJByIb.jpeg" alt="Ludo dice and pieces" />
+                            <img src={images.about_image} alt="Ludo dice and pieces" />
                         </div>
                         <div className="about-text">
-                            <h2>About Dream Ludo</h2>
-                            <p>Are you addicted to Online Games? Have you ever thought of earning through Online Gaming? Dream Ludo is an Online Portal which Offers Rewards and Unlimited Entertainment for Participating and Playing Games Online.</p>
+                            <h2>About {appTitle}</h2>
+                            <p>Are you addicted to Online Games? Have you ever thought of earning through Online Gaming? {appTitle} is an Online Portal which Offers Rewards and Unlimited Entertainment for Participating and Playing Games Online.</p>
                             <p>Ludo is among the most popular board games. Play Ludo with real players in our app and win real cash. Withdraw within 1 Hour in your favorite medium:</p>
                             <ul>
                                 <li><CheckIcon /> PayTM, PhonePay, or any other wallet</li>
@@ -100,7 +125,7 @@ const Home: React.FC<HomeProps> = ({ onNavigateToLogin }) => {
                         <div className="feature-card">
                             <div className="feature-icon"><MoneyIcon /></div>
                             <h3>Win Big Prizes</h3>
-                            <p>Play Dream Ludo and climb the leaderboard to smash exciting prize pools in every match you win.</p>
+                            <p>Play {appTitle} and climb the leaderboard to smash exciting prize pools in every match you win.</p>
                         </div>
                         <div className="feature-card">
                             <div className="feature-icon"><ClockIcon /></div>
@@ -116,9 +141,9 @@ const Home: React.FC<HomeProps> = ({ onNavigateToLogin }) => {
                         <p>For a better understanding of the app layout and how it works, here are our app snapshots.</p>
                     </div>
                     <div className="screenshot-grid">
-                        {Array.from({ length: 6 }).map((_, i) => (
+                        {images.screenshots.map((src: string, i: number) => (
                              <div key={i} className="screenshot-item">
-                                <img src={`https://picsum.photos/400/800?random=${i+1}`} alt={`App screenshot ${i + 1}`} />
+                                <img src={src} alt={`App screenshot ${i + 1}`} />
                             </div>
                         ))}
                     </div>
@@ -127,27 +152,27 @@ const Home: React.FC<HomeProps> = ({ onNavigateToLogin }) => {
                 <section id="testimonial" className="testimonial-section">
                     <div className="section-title">
                         <h2>What Our Clients Say</h2>
-                        <p>We are trusted by thousands of players worldwide. Here's what some of them have to say about Dream Ludo.</p>
+                        <p>We are trusted by thousands of players worldwide. Here's what some of them have to say about {appTitle}.</p>
                     </div>
                     <div className="testimonial-grid">
                         <div className="testimonial-card">
                             <p className="testimonial-text">"The best Ludo earning app I've ever played. The withdrawals are super fast and the community is great!"</p>
                             <div className="testimonial-author">
-                                <div className="author-avatar"><img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="Mickel Harice" /></div>
+                                <div className="author-avatar"><img src={images.avatars[0]} alt="Mickel Harice" /></div>
                                 <span className="author-name">Mickel Harice</span>
                             </div>
                         </div>
                         <div className="testimonial-card">
                             <p className="testimonial-text">"Finally, a fair and secure platform. I love the constant tournaments and the thrill of competition. Highly recommended."</p>
                              <div className="testimonial-author">
-                                <div className="author-avatar"><img src="https://i.pravatar.cc/150?u=a042581f4e29026704e" alt="Natasa" /></div>
+                                <div className="author-avatar"><img src={images.avatars[1]} alt="Natasa" /></div>
                                 <span className="author-name">Natasa</span>
                             </div>
                         </div>
                         <div className="testimonial-card">
-                            <p className="testimonial-text">"I was skeptical at first, but Dream Ludo is legit. I've won and withdrawn money multiple times without any issues."</p>
+                            <p className="testimonial-text">"I was skeptical at first, but {appTitle} is legit. I've won and withdrawn money multiple times without any issues."</p>
                             <div className="testimonial-author">
-                                <div className="author-avatar"><img src="https://i.pravatar.cc/150?u=a042581f4e29026704f" alt="Akash" /></div>
+                                <div className="author-avatar"><img src={images.avatars[2]} alt="Akash" /></div>
                                 <span className="author-name">Akash</span>
                             </div>
                         </div>
@@ -168,7 +193,7 @@ const Home: React.FC<HomeProps> = ({ onNavigateToLogin }) => {
                     <a href="#">Privacy Policy</a>
                     <a href="#">Terms & Condition</a>
                 </div>
-                <p className="copyright">&copy; {new Date().getFullYear()} Dream Ludo. All Rights Reserved.</p>
+                <p className="copyright">&copy; {new Date().getFullYear()} {appTitle}. All Rights Reserved.</p>
             </footer>
         </div>
     );

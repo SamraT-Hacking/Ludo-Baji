@@ -2,6 +2,7 @@
 
 
 
+
 import { createClient } from '@supabase/supabase-js';
 
 // IMPORTANT: Replace with your actual Supabase project URL and anon key
@@ -253,7 +254,23 @@ VALUES
   ('referee_bonus_amount', '{"amount": 10}'),
   ('referral_match_bonus', '{"amount": 1}'),
   ('deposit_gateway_settings', '{"active_gateway": "offline", "uddoktapay": {"api_key": "", "api_url": ""}, "paytm": {"merchant_id": "", "merchant_key": ""}, "offline": {"instructions": "Please send money to bKash number 01234567890 and enter the transaction ID below."}}'),
-  ('group_chat_status', '{"enabled": true}')
+  ('group_chat_status', '{"enabled": true}'),
+  ('home_page_config', '{
+    "about_image": "https://i.imgur.com/PhJByIb.jpeg",
+    "screenshots": [
+      "https://picsum.photos/400/800?random=1",
+      "https://picsum.photos/400/800?random=2",
+      "https://picsum.photos/400/800?random=3",
+      "https://picsum.photos/400/800?random=4",
+      "https://picsum.photos/400/800?random=5",
+      "https://picsum.photos/400/800?random=6"
+    ],
+    "avatars": [
+      "https://i.pravatar.cc/150?u=a042581f4e29026704d",
+      "https://i.pravatar.cc/150?u=a042581f4e29026704e",
+      "https://i.pravatar.cc/150?u=a042581f4e29026704f"
+    ]
+  }')
 ON CONFLICT (key) DO NOTHING;
 
 
@@ -1126,6 +1143,14 @@ DROP POLICY IF EXISTS "Allow anyone to view payment logos" ON storage.objects;
 CREATE POLICY "Allow anyone to view payment logos" ON storage.objects FOR SELECT USING (bucket_id = 'payment-methods');
 
 
+-- Create bucket for Landing Page Assets
+INSERT INTO storage.buckets (id, name, public) VALUES ('landing-page-assets', 'landing-page-assets', true) ON CONFLICT (id) DO NOTHING;
+
+-- Policies for landing-page-assets bucket
+DROP POLICY IF EXISTS "Allow admins to upload landing assets" ON storage.objects;
+CREATE POLICY "Allow admins to upload landing assets" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'landing-page-assets' AND public.is_admin());
+DROP POLICY IF EXISTS "Allow anyone to view landing assets" ON storage.objects;
+CREATE POLICY "Allow anyone to view landing assets" ON storage.objects FOR SELECT USING (bucket_id = 'landing-page-assets');
 
 
 
