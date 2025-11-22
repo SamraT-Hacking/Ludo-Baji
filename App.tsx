@@ -47,7 +47,7 @@ import Home from './components/Home';
 
 // Updated View type to include 'admin' base route and 'global-chat'
 export type View = 
-  | 'dashboard' | 'tournaments' | 'wallet' | 'leaderboard' | 'profile' | 'how-to-play'
+  | 'dashboard' | 'tournaments' | 'contest-details' | 'wallet' | 'leaderboard' | 'profile' | 'how-to-play'
   | 'transaction-history' | 'privacy-policy' | 'faq' 
   | 'support-chat' | 'about-us' | 'terms-and-conditions'
   | 'refer-and-earn' | 'refer-history' | 'refer-leaderboard' | 'admin' | 'global-chat';
@@ -76,6 +76,8 @@ function App() {
   const getInitialView = (): View => {
       const hash = window.location.hash.replace('#', '');
       if (hash.startsWith('admin')) return 'admin';
+      if (hash.startsWith('contest-details')) return 'contest-details';
+      
       const validViews: View[] = ['dashboard', 'tournaments', 'wallet', 'leaderboard', 'profile', 'how-to-play',
       'transaction-history', 'privacy-policy', 'faq',
       'support-chat', 'about-us', 'terms-and-conditions',
@@ -122,6 +124,9 @@ function App() {
               // If we are here but don't have data (e.g. refresh), go back to tournaments
               if (!selectedTournament) {
                   window.location.hash = 'tournaments';
+                  setCurrentView('tournaments');
+              } else {
+                  setCurrentView('contest-details');
               }
               return;
           }
@@ -142,7 +147,13 @@ function App() {
 
           if (validViews.includes(hash as View)) {
               setCurrentView(hash as View);
-              setSelectedTournament(null); // Clear contest overlay if we navigated to a main tab
+              // Only clear selectedTournament if we explicitly navigated away from it to a main tab
+              // If we hit back button, selectedTournament might still be needed if we go forward? 
+              // Actually, safer to clear it if we leave the detail view context.
+              if (currentView === 'contest-details') {
+                  setSelectedTournament(null);
+              }
+              
               setShowNotifications(false); // Clear notification overlay
               
               // FIX: If user hits back button while loading a game, clear the gameCode to stop loading
@@ -160,7 +171,7 @@ function App() {
 
       window.addEventListener('hashchange', handleHashChange);
       return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [selectedTournament, currentView, gameCode]); // Added gameCode to dependency
+  }, [selectedTournament, currentView, gameCode]); 
 
   // Use this instead of setCurrentView directly to update URL
   const navigateTo = (view: View) => {
@@ -195,8 +206,6 @@ function App() {
           } catch (err) {
               console.error("License Check Failed:", err);
               // In production, strict mode would block access.
-              // For now, if server is unreachable, we might allow access or block.
-              // Here we assume strict: block if cannot verify.
               setIsLicensed(false);
               setLicenseError('Could not connect to licensing server.');
           } finally {
@@ -379,6 +388,22 @@ function App() {
 
   // If in a game
   if (gameCode && gameState) {
+      // Check if in Setup (Lobby) state
+      if (gameState.gameStatus === GameStatus.Setup) {
+          return (
+            <AppConfigContext.Provider value={appConfig}>
+                <Lobby 
+                    gameId={gameCode}
+                    gameState={gameState}
+                    onStartGame={startGame}
+                    playerId={session.user.id}
+                    onLeave={handleResetGame}
+                />
+            </AppConfigContext.Provider>
+          );
+      }
+
+      // Active Game
       return (
           <AppConfigContext.Provider value={appConfig}>
               <Game
@@ -394,7 +419,7 @@ function App() {
       );
   }
 
-  // If in Lobby (waiting for game state)
+  // If trying to connect to a game (loading state before gameState is available)
   if (gameCode && !gameState) {
        return (
            <LoadingScreen 
@@ -424,25 +449,22 @@ function App() {
       window.location.hash = `contest-details/${tournament.id}`;
   };
 
-  if (selectedTournament && window.location.hash.includes('contest-details')) {
-      return (
-          <LanguageProvider>
-              <AppConfigContext.Provider value={appConfig}>
-                  <ContestDetails 
-                      tournament={selectedTournament} 
-                      onPlayNow={(code) => setGameCode(code)} 
-                      userId={session.user.id}
-                      adminCommission={adminCommission}
-                  />
-              </AppConfigContext.Provider>
-          </LanguageProvider>
-      );
-  }
-
   const renderView = () => {
       switch (currentView) {
           case 'dashboard': return <Dashboard setView={navigateTo} />;
           case 'tournaments': return <Tournaments userId={session.user.id} setView={navigateTo} onViewContest={handleViewContest} />;
+          case 'contest-details': 
+              if (selectedTournament) {
+                  return (
+                      <ContestDetails 
+                          tournament={selectedTournament} 
+                          onPlayNow={(code) => setGameCode(code)} 
+                          userId={session.user.id}
+                          adminCommission={adminCommission}
+                      />
+                  );
+              }
+              return <Dashboard setView={navigateTo} />;
           case 'wallet': return <Wallet />;
           case 'leaderboard': return <Leaderboard />;
           case 'profile': return <Profile session={session} />;
