@@ -144,6 +144,11 @@ function App() {
               setCurrentView(hash as View);
               setSelectedTournament(null); // Clear contest overlay if we navigated to a main tab
               setShowNotifications(false); // Clear notification overlay
+              
+              // FIX: If user hits back button while loading a game, clear the gameCode to stop loading
+              if (gameCode) {
+                  setGameCode(null);
+              }
           } else if (!hash) {
               // Default route
               setCurrentView('tournaments');
@@ -155,7 +160,7 @@ function App() {
 
       window.addEventListener('hashchange', handleHashChange);
       return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [selectedTournament, currentView]);
+  }, [selectedTournament, currentView, gameCode]); // Added gameCode to dependency
 
   // Use this instead of setCurrentView directly to update URL
   const navigateTo = (view: View) => {
@@ -312,13 +317,10 @@ function App() {
 
   // Theme Management
   const toggleAppTheme = useCallback(() => {
-      const newTheme = theme === 'classic' ? 'dark' : 'classic'; // Assuming 'modern' maps to dark mode styles conceptually or we strictly use 'light'/'dark' naming in future
-      // For now, let's stick to the ThemeName type but toggle between them.
-      // Wait, index.html uses data-theme="dark".
-      // Let's align React state with DOM attribute
+      const newTheme = theme === 'classic' ? 'dark' : 'classic'; 
       const nextTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', nextTheme);
-      setTheme(nextTheme === 'dark' ? 'modern' : 'classic'); // Mapping: classic->light, modern->dark
+      setTheme(nextTheme === 'dark' ? 'modern' : 'classic'); 
   }, [theme]);
 
   // Use Game Hook
@@ -341,7 +343,7 @@ function App() {
   // --- RENDER LOGIC ---
 
   if (checkingLicense || loadingMaintenance) {
-      return <LoadingScreen message="Initializing..." />;
+      return <LoadingScreen message="Initializing..." onCancel={() => {}} />;
   }
 
   if (!isLicensed) {
@@ -353,7 +355,6 @@ function App() {
   }
 
   // Maintenance Mode Check
-  // If enabled AND user is NOT admin AND (manual mode OR scheduled time is in future)
   if (maintenanceMode.enabled && !isAdmin) {
       const isManual = maintenanceMode.mode === 'manual';
       const isFuture = maintenanceMode.end_time && new Date(maintenanceMode.end_time) > new Date();
@@ -393,14 +394,13 @@ function App() {
       );
   }
 
-  // If in Lobby
+  // If in Lobby (waiting for game state)
   if (gameCode && !gameState) {
        return (
-           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-               <div className="spinner"></div>
-               <p style={{marginLeft: '1rem'}}>Connecting to game server...</p>
-               <button onClick={() => setGameCode(null)} style={{marginLeft: '1rem', padding: '0.5rem 1rem', background: '#e53e3e', color: 'white', border: 'none', borderRadius: '4px'}}>Cancel</button>
-           </div>
+           <LoadingScreen 
+                message="Connecting to game server..." 
+                onCancel={() => setGameCode(null)}
+           />
        );
   }
 

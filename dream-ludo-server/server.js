@@ -1,3 +1,4 @@
+
 // /dream-ludo-server/server.js
 require('dotenv').config();
 const express = require('express');
@@ -462,16 +463,37 @@ wss.on('connection', (ws, req) => {
                 
                 let game = games.get(gameCode);
                 if (!game) {
-                    let type = 'manual';
-                    let max_players = 2;
-                    let tournamentId = null;
-                    const { data: tournament } = await supabase.from('tournaments').select('*').eq('game_code', gameCode).neq('status', 'CANCELLED').maybeSingle();
-                    if (tournament) { type = 'tournament'; max_players = tournament.max_players; tournamentId = tournament.id; }
+                    try {
+                        let type = 'manual';
+                        let max_players = 2;
+                        let tournamentId = null;
+                        
+                        // Wrap DB call in try/catch to handle connection errors gracefully
+                        const { data: tournament, error: tourError } = await supabase
+                            .from('tournaments')
+                            .select('*')
+                            .eq('game_code', gameCode)
+                            .neq('status', 'CANCELLED')
+                            .maybeSingle();
+                        
+                        if (tourError) {
+                            console.error("Error fetching tournament:", tourError.message);
+                            // Inform client about server error so it doesn't hang
+                            ws.send(JSON.stringify({ type: 'ERROR', payload: { message: 'Server error: Failed to load game data. Please try again.' } }));
+                            return;
+                        }
 
-                    const options = { hostId: ws.userId, hostName: ws.userName, type, max_players, tournamentId };
-                    const gameState = createNewGame(gameCode, options);
-                    game = { state: gameState, clients: new Map(), turnTimer: null };
-                    games.set(gameCode, game);
+                        if (tournament) { type = 'tournament'; max_players = tournament.max_players; tournamentId = tournament.id; }
+
+                        const options = { hostId: ws.userId, hostName: ws.userName, type, max_players, tournamentId };
+                        const gameState = createNewGame(gameCode, options);
+                        game = { state: gameState, clients: new Map(), turnTimer: null };
+                        games.set(gameCode, game);
+                    } catch (err) {
+                        console.error("Critical error creating game:", err);
+                        ws.send(JSON.stringify({ type: 'ERROR', payload: { message: 'Failed to create game session.' } }));
+                        return;
+                    }
                 }
 
                 game.clients.set(ws.userId, ws);
