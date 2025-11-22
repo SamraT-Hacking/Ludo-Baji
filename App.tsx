@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useGameServer } from './hooks/useGameServer';
 import Game from './components/Game';
@@ -117,7 +115,7 @@ function App() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     license_token: licenseToken,
-                    domain: window.location.hostname
+                    domain: window.location.hostname || 'localhost'
                 }),
             });
 

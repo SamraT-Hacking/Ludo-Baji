@@ -10,6 +10,8 @@ interface LicenseActivationProps {
 
 const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSuccess, initialError, serverUrl }) => {
     const [purchaseCode, setPurchaseCode] = useState('');
+    // Default to current hostname, but allow user to edit it
+    const [domain, setDomain] = useState(window.location.hostname || ''); 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(initialError);
 
@@ -24,6 +26,20 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
             return;
         }
 
+        if (!domain.trim()) {
+            setError('Please enter the domain where this product is installed.');
+            setLoading(false);
+            return;
+        }
+
+        console.log("Sending activation request:", {
+            url: `${serverUrl}/api/activate`,
+            body: {
+                purchase_code: purchaseCode,
+                domain: domain
+            }
+        });
+
         try {
             // Attempt to connect to the server
             const response = await fetch(`${serverUrl}/api/activate`, {
@@ -31,7 +47,7 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     purchase_code: purchaseCode,
-                    domain: window.location.hostname
+                    domain: domain
                 })
             });
 
@@ -68,13 +84,21 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
         </svg>
     );
 
+    const IconGlobe = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+    );
+
     return (
         <div className="license-wrapper">
             <div className="auth-container license-container">
                 <div className="auth-header">
                     <div className="auth-logo" dangerouslySetInnerHTML={{ __html: LudoLogoSVG(48) }} />
                     <h1>Activate Your Product</h1>
-                    <p>Please enter your CodeCanyon purchase code to activate and start using the application.</p>
+                    <p>Please enter your CodeCanyon purchase code and domain to activate.</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="auth-form">
@@ -99,6 +123,18 @@ const LicenseActivation: React.FC<LicenseActivationProps> = ({ onActivationSucce
                             placeholder="Enter Purchase Code"
                             value={purchaseCode}
                             onChange={e => setPurchaseCode(e.target.value)}
+                            required
+                            className="auth-input"
+                        />
+                    </div>
+
+                    <div className="input-group">
+                        <span className="input-icon"><IconGlobe /></span>
+                        <input
+                            type="text"
+                            placeholder="Enter Domain (e.g. example.com)"
+                            value={domain}
+                            onChange={e => setDomain(e.target.value)}
                             required
                             className="auth-input"
                         />

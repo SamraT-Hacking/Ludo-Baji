@@ -60,9 +60,17 @@ app.get('/', (req, res) => {
  * @desc Activates a license using a CodeCanyon purchase code.
  */
 app.post('/api/activate', async (req, res) => {
+    // --- DETAILED DEBUG LOGGING ---
+    console.log("------------------------------------------------");
+    console.log("INCOMING ACTIVATION REQUEST");
+    console.log("Body Received:", req.body);
+    console.log("Headers:", req.headers);
+    console.log("------------------------------------------------");
+
     const { purchase_code, domain } = req.body;
 
     if (!purchase_code || !domain) {
+        console.error("Error: Missing purchase_code or domain in body.");
         return res.status(400).json({ message: 'Purchase code and domain are required.' });
     }
 
@@ -70,6 +78,8 @@ app.post('/api/activate', async (req, res) => {
         // 0. Check Server Mode
         const serverMode = await getSetting(db, 'server_mode') || 'live';
         const isTestMode = serverMode === 'test';
+        
+        console.log(`Server Mode: ${serverMode}`);
 
         // --- TEST MODE LOGIC ---
         if (isTestMode) {
@@ -91,7 +101,7 @@ app.post('/api/activate', async (req, res) => {
                 if (existing) {
                      return res.status(200).json({ 
                         message: 'Mock License active (Already Existed).', 
-                        license_token: existing.license_token_hash // Returning hash purely for dev/test flow consistency, ideally verify endpoint handles validation
+                        license_token: existing.license_token_hash 
                     });
                 }
 
@@ -124,6 +134,7 @@ app.post('/api/activate', async (req, res) => {
         }
 
         // 2. Verify with Envato API
+        console.log(`Verifying with Envato API for code: ${purchase_code}`);
         const envatoUrl = `https://api.envato.com/v3/market/author/sale?code=${purchase_code}`;
         const response = await fetch(envatoUrl, {
             headers: { 'Authorization': `Bearer ${ENVATO_TOKEN}` }
@@ -132,6 +143,7 @@ app.post('/api/activate', async (req, res) => {
         if (!response.ok) {
             const errorData = await response.json();
             const description = errorData.description || 'Unknown error';
+            console.error("Envato API Error:", description);
             
             // Provide clear feedback if user tries to verify a bought code instead of sold code
             if (description.includes('No sale belonging to the current user')) {
@@ -144,31 +156,25 @@ app.post('/api/activate', async (req, res) => {
         }
         
         const sale = await response.json();
+        console.log("Envato Sale Found:", sale.item.name);
         
         // 3. Item ID Check
         // In TEST MODE, we allow any Item ID (so you can test with other purchase codes you sold)
         // In LIVE MODE, strict check.
         if (!isTestMode && sale.item?.id?.toString() !== ITEM_ID) {
+            console.error(`Item ID Mismatch. Expected: ${ITEM_ID}, Got: ${sale.item?.id}`);
             return res.status(400).json({ message: 'This purchase code is for a different product.' });
         }
 
         // 4. Local Database Logic (Domain Locking)
         if (localRecord) {
             if (localRecord.domain && localRecord.domain !== domain) {
+                console.warn(`Domain mismatch. Locked to: ${localRecord.domain}, Request from: ${domain}`);
                 return res.status(403).json({ message: `This purchase code is already active on: ${localRecord.domain}` });
             }
             
-            // Valid existing license, return token (we don't store plain token, client usually has it, 
-            // but for re-install we might regenerate or logic depends on needs. 
-            // Here we assume client needs a new session/token, but we can't return plain token if we only stored hash.
-            // We'll just return success message. The client should have stored the token.
-            // If client lost token, they need to contact support to reset or we implement regeneration logic.
-            // For simplicity in this MVP: We re-verify success.
             return res.status(200).json({ 
                 message: 'License already active for this domain.', 
-                // Warning: We cannot return the original plain token because we only saved the hash!
-                // The user needs to assume it's working or we generate a temp one.
-                // Ideally, client stores token in localStorage.
                 license_token: "EXISTING_ACTIVATION" 
             });
         }
@@ -189,6 +195,7 @@ app.post('/api/activate', async (req, res) => {
         };
 
         await addLicense(db, newLicense);
+        console.log("New license activated successfully.");
 
         res.status(200).json({
             message: `Activation successful! (${isTestMode ? 'Test Mode' : 'Live'})`,
@@ -196,7 +203,7 @@ app.post('/api/activate', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Activation Error:', error);
+        console.error('Activation Exception:', error);
         res.status(500).json({ message: 'An internal server error occurred during activation.' });
     }
 });
