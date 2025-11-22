@@ -168,12 +168,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onLogout, appTheme, tog
         lineHeight: 1
     };
     
-    // Override root padding for full-screen admin panel
-    const rootElement = document.getElementById('root');
-    if (rootElement) {
-        rootElement.style.paddingTop = '0';
-    }
-
     const renderView = () => {
         if (selectedMatch) {
             return <MatchDetails match={selectedMatch} onBack={() => setSelectedMatch(null)} />;
@@ -200,9 +194,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit, onLogout, appTheme, tog
     };
     
     const handleExit = () => {
-        if (rootElement) {
-            rootElement.style.paddingTop = 'var(--header-height)';
-        }
         onExit();
     }
 

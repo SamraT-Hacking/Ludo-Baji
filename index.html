@@ -107,6 +107,7 @@
             background-size: 400% 400%;
             animation: gradient 25s ease infinite;
             overflow-x: hidden;
+            min-height: 100vh;
         }
         section {
             padding: clamp(3rem, 10vw, 6rem) clamp(1rem, 5vw, 3rem);
@@ -294,7 +295,6 @@
     <style id="dream-ludo-theme">
         /* App Layout */
         #root {
-            padding-top: var(--header-height);
             min-height: 100vh; /* Removed footer padding, some pages are full screen */
         }
         .app-header, .app-footer {
@@ -331,9 +331,11 @@
         }
         .main-content-area {
             padding: 0;
+            padding-top: var(--header-height); /* Padding for fixed header only in main app */
             background-color: var(--bg-main);
             padding-bottom: calc(var(--footer-height) + 1.5rem);
             transition: background-color 0.3s ease;
+            min-height: 100vh;
         }
         
         /* Global Page Padding Helper */
@@ -1963,7 +1965,7 @@
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
-            margin: 1rem 0;
+            margin-1rem 0;
         }
         .resolve-option-label {
             display: flex;
