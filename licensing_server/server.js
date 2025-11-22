@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { 
     initDb, getLicenseByCode, getLicenseByToken, getAllLicenses, 
-    addLicense, updateLicenseStatus, resetLicenseDomain,
+    addLicense, updateLicenseStatus, resetLicenseDomain, deleteLicense,
     getSetting, updateSetting
 } = require('./database');
 
@@ -26,7 +26,7 @@ if (!ENVATO_TOKEN || !ITEM_ID) {
 // Allow all origins for easier testing, especially with localhost ports
 app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS']
+    methods: ['GET', 'POST', 'DELETE', 'OPTIONS']
 }));
 app.use(express.json());
 
@@ -304,6 +304,17 @@ app.post('/api/admin/deactivate', adminAuth, async (req, res) => {
     try {
         await resetLicenseDomain(db, id);
         res.json({ success: true, message: 'Domain binding cleared.' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// NEW: Delete License Endpoint
+app.delete('/api/admin/license/:id', adminAuth, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await deleteLicense(db, id);
+        res.json({ success: true, message: 'License deleted successfully.' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

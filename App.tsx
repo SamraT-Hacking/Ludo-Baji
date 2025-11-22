@@ -62,8 +62,9 @@ export const AppConfigContext = React.createContext({
 const LICENSE_SERVER_URL = 'https://licensing-server-hg9l.onrender.com'; 
 
 function App() {
-  const [isLicensed, setIsLicensed] = useState(false);
-  const [checkingLicense, setCheckingLicense] = useState(true);
+  // Optimistic license check: If token exists, assume licensed immediately to avoid loading screen.
+  const [isLicensed, setIsLicensed] = useState(() => !!localStorage.getItem('license_token'));
+  const [checkingLicense, setCheckingLicense] = useState(!localStorage.getItem('license_token'));
   const [licenseError, setLicenseError] = useState<string | null>(null);
 
   const [theme, setTheme] = useState<ThemeName>('classic');
@@ -100,13 +101,12 @@ function App() {
   
   useEffect(() => {
     const verifyLicense = async () => {
-        setCheckingLicense(true);
         setLicenseError(null);
         try {
             const licenseToken = localStorage.getItem('license_token');
             if (!licenseToken) {
                 setIsLicensed(false);
-                setCheckingLicense(false);
+                setCheckingLicense(false); // Stop loading if explicitly no token
                 return;
             }
 
@@ -124,14 +124,20 @@ function App() {
             if (response.ok && data.valid) {
                 setIsLicensed(true);
             } else {
+                // Only remove and redirect if server explicitly says invalid
                 localStorage.removeItem('license_token');
                 setIsLicensed(false);
                 setLicenseError(data.message || 'License is invalid or expired.');
             }
         } catch (err) {
             console.error("License verification error:", err);
-            setIsLicensed(false);
-            setLicenseError('Could not connect to the license server. Please ensure it is running and accessible.');
+            // If network error, we might want to let them through optimistically or block.
+            // For strict security, block. For UX (like offline), maybe allow if previously validated?
+            // Currently blocking if error occurs and assuming invalid if verify fails.
+            // BUT, since we initialized isLicensed=true if token exists, the user is already in the app.
+            // We only flip isLicensed to false if we get a hard failure from logic.
+            // If fetch throws (network error), we currently do nothing, so user stays in app (Optimistic).
+            // This avoids the "Verifying..." screen blocking the user on bad internet.
         } finally {
             setCheckingLicense(false);
         }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Search, Lock, Unlock, RefreshCw, User, Globe, Calendar, AlertCircle, CheckCircle, BarChart, ToggleLeft, ToggleRight, Server } from 'lucide-react';
+import { Shield, Search, Lock, Unlock, RefreshCw, User, Globe, Calendar, AlertCircle, CheckCircle, BarChart, ToggleLeft, ToggleRight, Server, Trash2 } from 'lucide-react';
 
 const API_URL = 'http://localhost:4000/api';
 
@@ -123,6 +123,27 @@ function App() {
       body: JSON.stringify({ id })
     });
     fetchLicenses();
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Are you sure you want to DELETE this license permanently? This action cannot be undone.")) return;
+
+    try {
+      const res = await fetch(`${API_URL}/admin/license/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchLicenses();
+      } else {
+        alert('Failed to delete license');
+      }
+    } catch (err) {
+      alert('Error deleting license');
+    }
   };
 
   const filteredLicenses = licenses.filter(l => 
@@ -318,6 +339,13 @@ function App() {
                           style={{ ...btnStyle, backgroundColor: '#3b82f620', color: 'var(--primary)', opacity: !license.domain ? 0.5 : 1, cursor: !license.domain ? 'not-allowed' : 'pointer' }}
                         >
                           <RefreshCw size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(license.id)}
+                          title="Delete License"
+                          style={{ ...btnStyle, backgroundColor: '#ef444420', color: 'var(--danger)' }}
+                        >
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>

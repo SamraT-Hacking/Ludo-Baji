@@ -115,6 +115,16 @@ const resetLicenseDomain = (db, id) => {
     });
 };
 
+const deleteLicense = (db, id) => {
+    return new Promise((resolve, reject) => {
+        const sql = "DELETE FROM licenses WHERE id = ?";
+        db.run(sql, [id], function(err) {
+            if (err) reject(err);
+            resolve({ changes: this.changes });
+        });
+    });
+};
+
 // --- Settings Functions ---
 
 const getSetting = (db, key) => {
@@ -145,6 +155,7 @@ module.exports = {
     addLicense,
     updateLicenseStatus,
     resetLicenseDomain,
+    deleteLicense,
     getSetting,
     updateSetting
 };
