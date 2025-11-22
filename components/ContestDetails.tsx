@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Tournament, TournamentResult } from '../types';
 import { supabase } from '../utils/supabase';
 import { v4 as uuidv4 } from 'uuid';
@@ -33,8 +32,9 @@ const ContestDetails: React.FC<ContestDetailsProps> = ({
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [rules, setRules] = useState('');
 
-  // Fetch submitted result
-  const fetchSubmittedResult = useCallback(async () => {
+  // Load submitted result
+  useEffect(() => {
+    const fetchSubmittedResult = async () => {
       if (!supabase) return;
 
       const { data } = await supabase
@@ -45,31 +45,12 @@ const ContestDetails: React.FC<ContestDetailsProps> = ({
         .single();
 
       if (data) setSubmittedResult(data);
-  }, [tournament.id, userId]);
+    };
 
-  // Load initial data and subscribe to updates
-  useEffect(() => {
     if (['ACTIVE', 'UNDER_REVIEW', 'COMPLETED'].includes(tournament.status)) {
       fetchSubmittedResult();
     }
-    
-    if (!supabase) return;
-    const channel = supabase.channel(`contest-details-${tournament.id}`)
-      .on('postgres_changes', { 
-          event: '*', 
-          schema: 'public', 
-          table: 'tournament_results', 
-          filter: `tournament_id=eq.${tournament.id}`
-      }, (payload) => {
-          // If this user's result changed (e.g. admin edit), refresh
-          if ((payload.new as any).user_id === userId) {
-              fetchSubmittedResult();
-          }
-      })
-      .subscribe();
-      
-    return () => { supabase.removeChannel(channel); };
-  }, [tournament.id, tournament.status, userId, fetchSubmittedResult]);
+  }, [tournament.id, userId, tournament.status]);
 
   // Load rules
   useEffect(() => {
@@ -158,7 +139,14 @@ const ContestDetails: React.FC<ContestDetailsProps> = ({
 
       setSubmitMessage(data);
 
-      fetchSubmittedResult(); // Refresh result
+      const { data: newResult } = await supabase
+        .from('tournament_results')
+        .select('*')
+        .eq('tournament_id', tournament.id)
+        .eq('user_id', userId)
+        .single();
+
+      if (newResult) setSubmittedResult(newResult);
 
     } catch (err: any) {
       setSubmitMessage(`Error: ${err.message}`);
