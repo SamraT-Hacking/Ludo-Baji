@@ -24,7 +24,7 @@ const Lobby: React.FC<LobbyProps> = ({ gameId, gameState, onStartGame, playerId,
     // Only start countdown if it's a tournament and lobby is full
     const isFull = isTournament && gameState.players.length === maxPlayers;
     if (isFull && countdown === null) {
-        setCountdown(9); // Start countdown from 9 as per request (9,8..0)
+        setCountdown(10); // Start countdown from 10
     } else if (!isFull) {
         setCountdown(null); // Reset if someone leaves
     }
@@ -44,6 +44,14 @@ const Lobby: React.FC<LobbyProps> = ({ gameId, gameState, onStartGame, playerId,
         if (isHost) {
             onStartGame();
         }
+        
+        // Failsafe: Hide the countdown overlay after 1 second so users aren't stuck looking at "0" or "GO!"
+        // if the server fails to start the game (e.g. license error, network issue).
+        // This allows the user to see the error message in the lobby.
+        const failsafeTimer = setTimeout(() => {
+            setCountdown(null);
+        }, 1000);
+        return () => clearTimeout(failsafeTimer);
     }
   }, [countdown, isHost, onStartGame]);
 
@@ -82,10 +90,10 @@ const Lobby: React.FC<LobbyProps> = ({ gameId, gameState, onStartGame, playerId,
   return (
     <div className="lobby-page-wrapper">
       <div className="lobby-container-modern">
-        {countdown !== null && countdown >= 0 && (
+        {countdown !== null && (
           <div className="countdown-overlay">
-            <div className="countdown-number" key={countdown}>
-              {countdown}
+            <div className="countdown-number" key={countdown} style={countdown === 0 ? { fontSize: '8rem' } : {}}>
+              {countdown === 0 ? "GO!" : countdown}
             </div>
           </div>
         )}
@@ -110,6 +118,12 @@ const Lobby: React.FC<LobbyProps> = ({ gameId, gameState, onStartGame, playerId,
             <p className="lobby-waiting-message lobby-waiting-highlight">
               Waiting for opponent...
             </p>
+          )}
+          {/* Show server messages here if countdown is gone */}
+          {countdown === null && gameState.message && (
+             <p className="lobby-waiting-message" style={{ marginTop: '1rem', color: '#fbbf24' }}>
+                {gameState.message}
+             </p>
           )}
         </div>
 
