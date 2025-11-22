@@ -27,31 +27,36 @@ interface DepositGatewaySettings {
     };
 }
 
+interface FinancialLimits {
+    min_deposit: number;
+    min_withdraw: number;
+    withdraw_fee: number;
+}
+
 const WithdrawalModal: React.FC<{
     onClose: () => void;
     winningsBalance: number;
     onSuccess: () => void;
     currencySymbol: string;
-}> = ({ onClose, winningsBalance, onSuccess, currencySymbol }) => {
+    limits: FinancialLimits;
+}> = ({ onClose, winningsBalance, onSuccess, currencySymbol, limits }) => {
     const { t } = useLanguage();
     const [method, setMethod] = useState('bKash');
     const [accountNumber, setAccountNumber] = useState('');
     const [amount, setAmount] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
-    const TRANSACTION_FEE = 5.00;
-    const MIN_WITHDRAWAL = 100.00;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
         const numericAmount = parseFloat(amount);
         
-        if (isNaN(numericAmount) || numericAmount < MIN_WITHDRAWAL) {
-            setError(`Minimum withdrawal amount is ${currencySymbol}${MIN_WITHDRAWAL.toFixed(2)}.`);
+        if (isNaN(numericAmount) || numericAmount < limits.min_withdraw) {
+            setError(`Minimum withdrawal amount is ${currencySymbol}${limits.min_withdraw.toFixed(2)}.`);
             return;
         }
-        if (numericAmount + TRANSACTION_FEE > winningsBalance) {
+        if (numericAmount + limits.withdraw_fee > winningsBalance) {
             setError('Insufficient winnings balance to cover amount and transaction fee.');
             return;
         }
@@ -121,12 +126,12 @@ const WithdrawalModal: React.FC<{
                             value={amount}
                             onChange={e => setAmount(e.target.value)}
                             className="profile-input"
-                            placeholder={`${t('wallet_min_withdraw_info', 'Min Withdraw')}: ${currencySymbol}${MIN_WITHDRAWAL.toFixed(2)}`}
-                            min={MIN_WITHDRAWAL}
+                            placeholder={`${t('wallet_min_withdraw_info', 'Min Withdraw')}: ${currencySymbol}${limits.min_withdraw.toFixed(2)}`}
+                            min={limits.min_withdraw}
                             step="0.01"
                         />
                     </div>
-                    <p className="fee-info">{t('wallet_fee_info', 'Transaction Fee')}: {currencySymbol}{TRANSACTION_FEE.toFixed(2)}</p>
+                    <p className="fee-info">{t('wallet_fee_info', 'Transaction Fee')}: {currencySymbol}{limits.withdraw_fee.toFixed(2)}</p>
                     {error && <p style={{ color: 'red', textAlign: 'center', fontSize: '0.9rem' }}>{error}</p>}
                     <button type="submit" className="profile-submit-btn" disabled={submitting} style={{ width: '100%', marginTop: '1rem' }}>
                         {submitting ? '...' : t('wallet_submit_req', 'Submit Request')}
@@ -142,7 +147,8 @@ const DepositModal: React.FC<{
     settings: DepositGatewaySettings | null;
     onSuccess: (message: string) => void;
     currencySymbol: string;
-}> = ({ onClose, settings, onSuccess, currencySymbol }) => {
+    limits: FinancialLimits;
+}> = ({ onClose, settings, onSuccess, currencySymbol, limits }) => {
     const { t } = useLanguage();
     const [amount, setAmount] = useState('');
     const [trxId, setTrxId] = useState('');
@@ -151,7 +157,6 @@ const DepositModal: React.FC<{
     const [submitting, setSubmitting] = useState(false);
     const [selectedMethod, setSelectedMethod] = useState<OfflineMethod | null>(null);
     const [copied, setCopied] = useState(false);
-    const MIN_DEPOSIT = 30.00;
 
     const handleCopyNumber = async () => {
         if (selectedMethod) {
@@ -168,8 +173,8 @@ const DepositModal: React.FC<{
     const handleOfflineSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const numericAmount = parseFloat(amount);
-        if (isNaN(numericAmount) || numericAmount < MIN_DEPOSIT) {
-            setError(`${t('wallet_min_deposit_info', 'Min Deposit')}: ${currencySymbol}${MIN_DEPOSIT.toFixed(2)}.`);
+        if (isNaN(numericAmount) || numericAmount < limits.min_deposit) {
+            setError(`${t('wallet_min_deposit_info', 'Min Deposit')}: ${currencySymbol}${limits.min_deposit.toFixed(2)}.`);
             return;
         }
         if (!trxId.trim()) {
@@ -205,8 +210,8 @@ const DepositModal: React.FC<{
     const handleOnlineSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const numericAmount = parseFloat(amount);
-        if (isNaN(numericAmount) || numericAmount < MIN_DEPOSIT) {
-            setError(`${t('wallet_min_deposit_info', 'Min Deposit')}: ${currencySymbol}${MIN_DEPOSIT.toFixed(2)}.`);
+        if (isNaN(numericAmount) || numericAmount < limits.min_deposit) {
+            setError(`${t('wallet_min_deposit_info', 'Min Deposit')}: ${currencySymbol}${limits.min_deposit.toFixed(2)}.`);
             return;
         }
         
@@ -346,7 +351,7 @@ const DepositModal: React.FC<{
                         <form onSubmit={handleOfflineSubmit} className="deposit-form">
                             <div className="profile-input-group">
                                 <label htmlFor="amount_off">{t('wallet_amount', 'Amount')}</label>
-                                <input id="amount_off" type="number" value={amount} onChange={e => setAmount(e.target.value)} className="profile-input" placeholder={`${t('wallet_min_deposit_info', 'Min Deposit')}: ${currencySymbol}${MIN_DEPOSIT.toFixed(2)}`} required />
+                                <input id="amount_off" type="number" value={amount} onChange={e => setAmount(e.target.value)} className="profile-input" placeholder={`${t('wallet_min_deposit_info', 'Min Deposit')}: ${currencySymbol}${limits.min_deposit.toFixed(2)}`} required />
                             </div>
                             <div className="profile-input-group">
                                 <label htmlFor="sender">{t('wallet_sender_num', 'Sender Number')}</label>
@@ -370,7 +375,7 @@ const DepositModal: React.FC<{
         return (
             <form onSubmit={handleOnlineSubmit}>
                 <p style={{textAlign: 'center', marginBottom: '1.5rem'}}>{t('wallet_redirect_msg', 'You will be redirected to')} {getGatewayName()} {t('wallet_proceed_pay', 'to complete your payment securely.')}</p>
-                <div className="profile-input-group"><label htmlFor="amount_online">{t('wallet_amount', 'Amount')}</label><input id="amount_online" type="number" value={amount} onChange={e => setAmount(e.target.value)} className="profile-input" placeholder={`${t('wallet_min_deposit_info', 'Min Deposit')}: ${currencySymbol}${MIN_DEPOSIT.toFixed(2)}`} required /></div>
+                <div className="profile-input-group"><label htmlFor="amount_online">{t('wallet_amount', 'Amount')}</label><input id="amount_online" type="number" value={amount} onChange={e => setAmount(e.target.value)} className="profile-input" placeholder={`${t('wallet_min_deposit_info', 'Min Deposit')}: ${currencySymbol}${limits.min_deposit.toFixed(2)}`} required /></div>
                 <button type="submit" className="profile-submit-btn" disabled={submitting} style={{ width: '100%', marginTop: '1rem', backgroundColor: '#48bb78' }}>{submitting ? '...' : t('wallet_proceed_pay', 'Proceed to Pay')}</button>
             </form>
         );
@@ -456,6 +461,7 @@ const Wallet: React.FC = () => {
     const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
     const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
     const [depositSettings, setDepositSettings] = useState<DepositGatewaySettings | null>(null);
+    const [limits, setLimits] = useState<FinancialLimits>({ min_deposit: 30, min_withdraw: 100, withdraw_fee: 5 });
     
     const { currencySymbol } = useContext(AppConfigContext);
     
@@ -468,11 +474,13 @@ const Wallet: React.FC = () => {
             const [
                 { data: profileData, error: profileError },
                 { data: transactionsData, error: transactionsError },
-                { data: settingsData, error: settingsError }
+                { data: settingsData, error: settingsError },
+                { data: limitsData, error: limitsError }
             ] = await Promise.all([
                 supabase.from('profiles').select('*').eq('id', user.id).single(),
                 supabase.from('transactions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-                supabase.from('app_settings').select('value').eq('key', 'deposit_gateway_settings').single()
+                supabase.from('app_settings').select('value').eq('key', 'deposit_gateway_settings').single(),
+                supabase.from('app_settings').select('value').eq('key', 'financial_limits').single()
             ]);
 
             if (profileError) throw profileError;
@@ -482,6 +490,10 @@ const Wallet: React.FC = () => {
             setProfile(profileData);
             setTransactions(transactionsData as Transaction[]);
             setDepositSettings(settingsData.value as DepositGatewaySettings);
+            
+            if (limitsData && limitsData.value) {
+                setLimits(limitsData.value as FinancialLimits);
+            }
 
         } catch (e: any) {
             setError(e.message);
@@ -574,6 +586,7 @@ const Wallet: React.FC = () => {
                     winningsBalance={profile.winnings_balance}
                     onSuccess={() => handleActionSuccess('Withdrawal request submitted successfully.')}
                     currencySymbol={currencySymbol}
+                    limits={limits}
                 />
             )}
             {isDepositModalOpen && (
@@ -582,6 +595,7 @@ const Wallet: React.FC = () => {
                     settings={depositSettings}
                     onSuccess={handleActionSuccess}
                     currencySymbol={currencySymbol}
+                    limits={limits}
                 />
             )}
             
@@ -612,7 +626,7 @@ const Wallet: React.FC = () => {
                     <button onClick={() => setIsDepositModalOpen(true)} className="profile-submit-btn" style={{backgroundColor: '#48bb78'}}>{t('wallet_btn_deposit', 'Deposit')}</button>
                     <button onClick={() => setIsWithdrawModalOpen(true)} className="profile-submit-btn" style={{backgroundColor: '#f56565'}}>{t('wallet_btn_withdraw', 'Withdraw')}</button>
                 </div>
-                <p className="info-text">{t('wallet_min_deposit_info', 'Min Deposit')}: {currencySymbol}30.00 / {t('wallet_min_withdraw_info', 'Min Withdraw')}: {currencySymbol}100.00 (from Winnings)</p>
+                <p className="info-text">{t('wallet_min_deposit_info', 'Min Deposit')}: {currencySymbol}{limits.min_deposit.toFixed(2)} / {t('wallet_min_withdraw_info', 'Min Withdraw')}: {currencySymbol}{limits.min_withdraw.toFixed(2)} (from Winnings)</p>
             </div>
 
             <div className="wallet-history-card">

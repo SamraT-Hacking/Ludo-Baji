@@ -1,8 +1,4 @@
 
-
-
-
-
 import { createClient } from '@supabase/supabase-js';
 
 // IMPORTANT: Replace with your actual Supabase project URL and anon key
@@ -255,6 +251,8 @@ VALUES
   ('referral_match_bonus', '{"amount": 1}'),
   ('deposit_gateway_settings', '{"active_gateway": "offline", "uddoktapay": {"api_key": "", "api_url": ""}, "paytm": {"merchant_id": "", "merchant_key": ""}, "offline": {"instructions": "Please send money to bKash number 01234567890 and enter the transaction ID below."}}'),
   ('group_chat_status', '{"enabled": true}'),
+  ('financial_limits', '{"min_deposit": 30, "min_withdraw": 100, "withdraw_fee": 5}'),
+  ('maintenance_mode', '{"enabled": false, "mode": "manual", "end_time": null}'),
   ('home_page_config', '{
     "about_image": "https://i.imgur.com/PhJByIb.jpeg",
     "screenshots": [
@@ -1152,8 +1150,10 @@ CREATE POLICY "Allow admins to upload landing assets" ON storage.objects FOR INS
 DROP POLICY IF EXISTS "Allow anyone to view landing assets" ON storage.objects;
 CREATE POLICY "Allow anyone to view landing assets" ON storage.objects FOR SELECT USING (bucket_id = 'landing-page-assets');
 
+-- Default settings for Financial Limits and Maintenance Mode
+INSERT INTO public.app_settings (key, value)
+VALUES 
+  ('financial_limits', '{"min_deposit": 30, "min_withdraw": 100, "withdraw_fee": 5}'),
+  ('maintenance_mode', '{"enabled": false, "mode": "manual", "end_time": null}')
+ON CONFLICT (key) DO NOTHING;
 
-
-
-
-*/

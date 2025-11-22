@@ -1,8 +1,9 @@
+
 import React from 'react';
 import { View } from '../App';
 import { 
     ProfileIconSVG, WalletIconSVG, TransactionHistoryIconSVG, LeaderboardIconSVG, 
-    SupportChatIconSVG, FAQIconSVG, AboutUsIconSVG, UserGroupIconSVG,
+    FAQIconSVG, AboutUsIconSVG, UserGroupIconSVG,
     PrivacyPolicyIconSVG, TermsAndConditionsIconSVG, AdminPanelIconSVG, LogoutIconSVG,
     SunIconSVG, MoonIconSVG
 } from '../assets/icons';
@@ -13,7 +14,7 @@ const GlobeIconSVG = () => `
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <circle cx="12" cy="12" r="10"></circle>
   <line x1="2" y1="12" x2="22" y2="12"></line>
-  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1-4-10z"></path>
 </svg>
 `;
 
@@ -42,7 +43,6 @@ const MoreMenu: React.FC<MoreMenuProps> = ({ setView, onLogout, isAdmin, onEnter
         { id: 'transaction-history', label: t('menu_history', 'Transaction History'), icon: TransactionHistoryIconSVG(), iconColor: '#9f7aea' },
         { id: 'refer-and-earn', label: t('menu_refer', 'Refer & Earn'), icon: UserGroupIconSVG(), iconColor: '#fbbf24' },
         { id: 'leaderboard', label: t('menu_leaderboard', 'Leaderboard'), icon: LeaderboardIconSVG(), iconColor: '#ed8936' },
-        { id: 'support-chat', label: t('menu_support', 'Support Chat'), icon: SupportChatIconSVG(), iconColor: '#38b2ac' },
         { id: 'faq', label: t('menu_faq', 'FAQ'), icon: FAQIconSVG(), iconColor: '#63b3ed' },
         { id: 'about-us', label: t('menu_about', 'About Us'), icon: AboutUsIconSVG(), iconColor: '#a3bffa' },
         { id: 'privacy-policy', label: t('menu_privacy', 'Privacy Policy'), icon: PrivacyPolicyIconSVG(), iconColor: '#a0aec0' },

@@ -1,15 +1,17 @@
 
 import React, { useContext } from 'react';
-import { LudoLogoSVG, BellIconSVG } from '../assets/icons';
+import { LudoLogoSVG, BellIconSVG, MoonIconSVG, SunIconSVG } from '../assets/icons';
 import { AppConfigContext } from '../App';
 
 interface HeaderProps {
     unreadCount: number;
     onBellClick: () => void;
     adminStatus: 'online' | 'offline';
+    appTheme: 'light' | 'dark';
+    toggleAppTheme: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ unreadCount, onBellClick, adminStatus }) => {
+const Header: React.FC<HeaderProps> = ({ unreadCount, onBellClick, adminStatus, appTheme, toggleAppTheme }) => {
     const { appTitle } = useContext(AppConfigContext);
 
     const headerStyle: React.CSSProperties = {
@@ -29,7 +31,7 @@ const Header: React.FC<HeaderProps> = ({ unreadCount, onBellClick, adminStatus }
         marginLeft: 'auto',
         display: 'flex',
         alignItems: 'center',
-        gap: '1rem',
+        gap: '0.75rem',
     };
 
     return (
@@ -37,6 +39,23 @@ const Header: React.FC<HeaderProps> = ({ unreadCount, onBellClick, adminStatus }
             <div style={headerStyle}>
                 <div dangerouslySetInnerHTML={{ __html: LudoLogoSVG(32) }} />
                 <h1 style={titleStyle}>{appTitle}</h1>
+                
+                <button 
+                    onClick={toggleAppTheme}
+                    style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'inherit',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px'
+                    }}
+                    title={appTheme === 'light' ? "Switch to Dark Mode" : "Switch to Light Mode"}
+                >
+                    <div dangerouslySetInnerHTML={{ __html: appTheme === 'light' ? MoonIconSVG() : SunIconSVG() }} style={{ width: '20px', height: '20px' }} />
+                </button>
             </div>
             
             <div style={rightControlsStyle}>

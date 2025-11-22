@@ -31,6 +31,18 @@ interface HomePageConfig {
     avatars: string[];
 }
 
+interface FinancialLimits {
+    min_deposit: number;
+    min_withdraw: number;
+    withdraw_fee: number;
+}
+
+interface MaintenanceSettings {
+    enabled: boolean;
+    mode: 'manual' | 'scheduled';
+    end_time: string | null;
+}
+
 // --- Rich Text Editor Component ---
 interface RichTextEditorProps {
     initialValue: string;
@@ -172,6 +184,23 @@ const Settings: React.FC = () => {
     const [savingHomePage, setSavingHomePage] = useState(false);
     const [uploadingHomeAsset, setUploadingHomeAsset] = useState<string | null>(null);
 
+    // Financial Limits
+    const [financialLimits, setFinancialLimits] = useState<FinancialLimits>({
+        min_deposit: 30,
+        min_withdraw: 100,
+        withdraw_fee: 5
+    });
+    const [savingFinancials, setSavingFinancials] = useState(false);
+
+    // Maintenance Mode
+    const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings>({
+        enabled: false,
+        mode: 'manual',
+        end_time: null
+    });
+    const [maintenanceDuration, setMaintenanceDuration] = useState({ days: 0, hours: 1, minutes: 0 });
+    const [savingMaintenance, setSavingMaintenance] = useState(false);
+
 
     const fetchSettings = useCallback(async () => {
         if (!supabase) return;
@@ -243,6 +272,12 @@ const Settings: React.FC = () => {
                     ? homeConfig.avatars
                     : Array(3).fill('')
             });
+
+            const financial = getSetting('financial_limits', { min_deposit: 30, min_withdraw: 100, withdraw_fee: 5 });
+            setFinancialLimits(financial);
+
+            const maintenance = getSetting('maintenance_mode', { enabled: false, mode: 'manual', end_time: null });
+            setMaintenanceSettings(maintenance);
 
 
         } catch (e: any) {
@@ -604,6 +639,67 @@ const Settings: React.FC = () => {
         }
     };
 
+    const handleSaveFinancials = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!supabase) return;
+        setSavingFinancials(true);
+        setMessage(null);
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({ key: 'financial_limits', value: financialLimits });
+
+            if (error) throw error;
+            setMessage({ type: 'success', text: 'Financial limits updated!' });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (e: any) {
+            setMessage({ type: 'error', text: `Error saving limits: ${e.message}` });
+        } finally {
+            setSavingFinancials(false);
+        }
+    };
+
+    const handleSaveMaintenance = async () => {
+        if (!supabase) return;
+        setSavingMaintenance(true);
+        setMessage(null);
+
+        let endTime = null;
+        if (maintenanceSettings.mode === 'scheduled') {
+            const now = new Date();
+            now.setDate(now.getDate() + maintenanceDuration.days);
+            now.setHours(now.getHours() + maintenanceDuration.hours);
+            now.setMinutes(now.getMinutes() + maintenanceDuration.minutes);
+            endTime = now.toISOString();
+        }
+
+        const newSettings = {
+            ...maintenanceSettings,
+            end_time: endTime
+        };
+
+        // If disabled, force mode to manual for simplicity when re-enabling
+        if (!newSettings.enabled) {
+            newSettings.mode = 'manual';
+            newSettings.end_time = null;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({ key: 'maintenance_mode', value: newSettings });
+
+            if (error) throw error;
+            setMaintenanceSettings(newSettings);
+            setMessage({ type: 'success', text: 'Maintenance settings updated!' });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (e: any) {
+            setMessage({ type: 'error', text: `Error: ${e.message}` });
+        } finally {
+            setSavingMaintenance(false);
+        }
+    };
+
     // Styles
     const headerStyle: React.CSSProperties = { fontSize: '2rem', marginBottom: '2rem' };
     const containerStyle: React.CSSProperties = { backgroundColor: 'var(--bg-card)', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.05)', marginBottom: '1.5rem', border: '1px solid var(--border-color)' };
@@ -658,57 +754,7 @@ const Settings: React.FC = () => {
 
             {activeTab === 'content' && (
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                     <div style={containerStyle}>
-                        <label style={labelStyle}>Game Rules</label>
-                        {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={rules} onChange={setRules} />}
-                        <button onClick={() => saveContentSection('rules_and_policy', rules, 'Game Rules')} style={buttonStyle} disabled={savingContentKey === 'rules_and_policy' || loading}>{savingContentKey === 'rules_and_policy' ? 'Saving...' : 'Save Rules'}</button>
-                    </div>
-                     <div style={containerStyle}>
-                        <label style={labelStyle}>About Us</label>
-                        {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={aboutUs} onChange={setAboutUs} />}
-                        <button onClick={() => saveContentSection('content_about_us', aboutUs, 'About Us')} style={buttonStyle} disabled={savingContentKey === 'content_about_us' || loading}>{savingContentKey === 'content_about_us' ? 'Saving...' : 'Save About Us'}</button>
-                    </div>
-                     <div style={containerStyle}>
-                        <label style={labelStyle}>Privacy Policy</label>
-                         {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={privacyPolicy} onChange={setPrivacyPolicy} />}
-                        <button onClick={() => saveContentSection('content_privacy_policy', privacyPolicy, 'Privacy Policy')} style={buttonStyle} disabled={savingContentKey === 'content_privacy_policy' || loading}>{savingContentKey === 'content_privacy_policy' ? 'Saving...' : 'Save Policy'}</button>
-                    </div>
-                    <div style={containerStyle}>
-                        <label style={labelStyle}>Terms & Conditions</label>
-                         {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={terms} onChange={setTerms} />}
-                        <button onClick={() => saveContentSection('content_terms', terms, 'Terms & Conditions')} style={buttonStyle} disabled={savingContentKey === 'content_terms' || loading}>{savingContentKey === 'content_terms' ? 'Saving...' : 'Save Terms'}</button>
-                    </div>
-                     <div style={containerStyle}>
-                        <label style={labelStyle}>FAQ</label>
-                        {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={faq} onChange={setFaq} />}
-                        <button onClick={() => saveContentSection('content_faq', faq, 'FAQ')} style={buttonStyle} disabled={savingContentKey === 'content_faq' || loading}>{savingContentKey === 'content_faq' ? 'Saving...' : 'Save FAQ'}</button>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'setups' && (
-                <>
-                    {/* General App Config */}
-                    <div style={containerStyle}>
-                        <form onSubmit={handleSaveAppConfig}>
-                            <label style={labelStyle}>General App Settings</label>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1rem' }}>
-                                <div>
-                                    <label style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#4a5568', display: 'block', marginBottom: '0.5rem'}}>App Title</label>
-                                    <input type="text" value={appTitle} onChange={e => setAppTitle(e.target.value)} style={inputStyle} placeholder="e.g., Dream Ludo" />
-                                </div>
-                                <div>
-                                    <label style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#4a5568', display: 'block', marginBottom: '0.5rem'}}>Currency Symbol</label>
-                                    <input type="text" value={currencySymbol} onChange={e => setCurrencySymbol(e.target.value)} style={inputStyle} placeholder="e.g., ৳, $, ₹" />
-                                </div>
-                            </div>
-                            <button type="submit" style={buttonStyle} disabled={savingConfig || loading}>
-                                {savingConfig ? 'Saving...' : 'Save Configuration'}
-                            </button>
-                        </form>
-                    </div>
-
-                    {/* Home Page Design */}
+                     {/* Home Page Design - Moved Here */}
                     <div style={containerStyle}>
                         <form onSubmit={handleSaveHomePage}>
                             <label style={labelStyle}>Home Page Design</label>
@@ -772,6 +818,56 @@ const Settings: React.FC = () => {
 
                             <button type="submit" style={buttonStyle} disabled={savingHomePage || loading}>
                                 {savingHomePage ? 'Saving...' : 'Save Home Page Design'}
+                            </button>
+                        </form>
+                    </div>
+
+                     <div style={containerStyle}>
+                        <label style={labelStyle}>Game Rules</label>
+                        {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={rules} onChange={setRules} />}
+                        <button onClick={() => saveContentSection('rules_and_policy', rules, 'Game Rules')} style={buttonStyle} disabled={savingContentKey === 'rules_and_policy' || loading}>{savingContentKey === 'rules_and_policy' ? 'Saving...' : 'Save Rules'}</button>
+                    </div>
+                     <div style={containerStyle}>
+                        <label style={labelStyle}>About Us</label>
+                        {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={aboutUs} onChange={setAboutUs} />}
+                        <button onClick={() => saveContentSection('content_about_us', aboutUs, 'About Us')} style={buttonStyle} disabled={savingContentKey === 'content_about_us' || loading}>{savingContentKey === 'content_about_us' ? 'Saving...' : 'Save About Us'}</button>
+                    </div>
+                     <div style={containerStyle}>
+                        <label style={labelStyle}>Privacy Policy</label>
+                         {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={privacyPolicy} onChange={setPrivacyPolicy} />}
+                        <button onClick={() => saveContentSection('content_privacy_policy', privacyPolicy, 'Privacy Policy')} style={buttonStyle} disabled={savingContentKey === 'content_privacy_policy' || loading}>{savingContentKey === 'content_privacy_policy' ? 'Saving...' : 'Save Policy'}</button>
+                    </div>
+                    <div style={containerStyle}>
+                        <label style={labelStyle}>Terms & Conditions</label>
+                         {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={terms} onChange={setTerms} />}
+                        <button onClick={() => saveContentSection('content_terms', terms, 'Terms & Conditions')} style={buttonStyle} disabled={savingContentKey === 'content_terms' || loading}>{savingContentKey === 'content_terms' ? 'Saving...' : 'Save Terms'}</button>
+                    </div>
+                     <div style={containerStyle}>
+                        <label style={labelStyle}>FAQ</label>
+                        {loading ? <p>Loading...</p> : <SimpleRichTextEditor initialValue={faq} onChange={setFaq} />}
+                        <button onClick={() => saveContentSection('content_faq', faq, 'FAQ')} style={buttonStyle} disabled={savingContentKey === 'content_faq' || loading}>{savingContentKey === 'content_faq' ? 'Saving...' : 'Save FAQ'}</button>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'setups' && (
+                <>
+                    {/* General App Config */}
+                    <div style={containerStyle}>
+                        <form onSubmit={handleSaveAppConfig}>
+                            <label style={labelStyle}>General App Settings</label>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1rem' }}>
+                                <div>
+                                    <label style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#4a5568', display: 'block', marginBottom: '0.5rem'}}>App Title</label>
+                                    <input type="text" value={appTitle} onChange={e => setAppTitle(e.target.value)} style={inputStyle} placeholder="e.g., Dream Ludo" />
+                                </div>
+                                <div>
+                                    <label style={{fontSize: '0.9rem', fontWeight: 'bold', color: '#4a5568', display: 'block', marginBottom: '0.5rem'}}>Currency Symbol</label>
+                                    <input type="text" value={currencySymbol} onChange={e => setCurrencySymbol(e.target.value)} style={inputStyle} placeholder="e.g., ৳, $, ₹" />
+                                </div>
+                            </div>
+                            <button type="submit" style={buttonStyle} disabled={savingConfig || loading}>
+                                {savingConfig ? 'Saving...' : 'Save Configuration'}
                             </button>
                         </form>
                     </div>
@@ -887,194 +983,272 @@ const Settings: React.FC = () => {
             )}
             
             {activeTab === 'security' && (
-                <div style={containerStyle}>
-                    <form onSubmit={handleSaveSecuritySettings}>
-                        <label style={labelStyle}>FingerprintJS Device Identification</label>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                            Use FingerprintJS Pro to generate a unique device ID for each user to help prevent duplicate accounts on the same device. 
-                            If disabled, a less secure browser-based ID will be used as a fallback.
-                        </p>
+                <>
+                    <div style={containerStyle}>
+                        <form onSubmit={handleSaveSecuritySettings}>
+                            <label style={labelStyle}>FingerprintJS Device Identification</label>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                Use FingerprintJS Pro to generate a unique device ID for each user to help prevent duplicate accounts on the same device. 
+                                If disabled, a less secure browser-based ID will be used as a fallback.
+                            </p>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                            <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '60px', height: '34px' }}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={securitySettings.enabled} 
-                                    onChange={(e) => setSecuritySettings(s => ({ ...s, enabled: e.target.checked }))}
-                                    style={{ opacity: 0, width: 0, height: 0 }}
-                                />
-                                <span className="slider round" style={{ 
-                                    position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, 
-                                    backgroundColor: securitySettings.enabled ? '#48bb78' : '#ccc', transition: '.4s', borderRadius: '34px' 
-                                }}>
-                                    <span style={{ 
-                                        position: 'absolute', content: '""', height: '26px', width: '26px', left: securitySettings.enabled ? '30px' : '4px', bottom: '4px', 
-                                        backgroundColor: 'white', transition: '.4s', borderRadius: '50%' 
-                                    }}></span>
-                                </span>
-                            </label>
-                            <span style={{fontWeight: 600, color: securitySettings.enabled ? '#48bb78' : '#e53e3e'}}>{securitySettings.enabled ? 'ENABLED' : 'DISABLED'}</span>
-                        </div>
-
-                        {securitySettings.enabled && (
-                            <div>
-                                <label style={{fontSize: '1rem', fontWeight: 600, display: 'block', marginBottom: '0.5rem'}}>FingerprintJS Public API Key</label>
-                                <input 
-                                    type="text" 
-                                    value={securitySettings.apiKey} 
-                                    onChange={e => setSecuritySettings(s => ({ ...s, apiKey: e.target.value }))} 
-                                    style={inputStyle} 
-                                    placeholder="Enter your public API key" 
-                                />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                                <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '60px', height: '34px' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={securitySettings.enabled} 
+                                        onChange={(e) => setSecuritySettings(s => ({ ...s, enabled: e.target.checked }))}
+                                        style={{ opacity: 0, width: 0, height: 0 }}
+                                    />
+                                    <span className="slider round" style={{ 
+                                        position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, 
+                                        backgroundColor: securitySettings.enabled ? '#48bb78' : '#ccc', transition: '.4s', borderRadius: '34px' 
+                                    }}>
+                                        <span style={{ 
+                                            position: 'absolute', content: '""', height: '26px', width: '26px', left: securitySettings.enabled ? '30px' : '4px', bottom: '4px', 
+                                            backgroundColor: 'white', transition: '.4s', borderRadius: '50%' 
+                                        }}></span>
+                                    </span>
+                                </label>
+                                <span style={{fontWeight: 600, color: securitySettings.enabled ? '#48bb78' : '#e53e3e'}}>{securitySettings.enabled ? 'ENABLED' : 'DISABLED'}</span>
                             </div>
-                        )}
+
+                            {securitySettings.enabled && (
+                                <div>
+                                    <label style={{fontSize: '1rem', fontWeight: 600, display: 'block', marginBottom: '0.5rem'}}>FingerprintJS Public API Key</label>
+                                    <input 
+                                        type="text" 
+                                        value={securitySettings.apiKey} 
+                                        onChange={e => setSecuritySettings(s => ({ ...s, apiKey: e.target.value }))} 
+                                        style={inputStyle} 
+                                        placeholder="Enter your public API key" 
+                                    />
+                                </div>
+                            )}
+                            
+                            <button type="submit" style={buttonStyle} disabled={savingSecurity || loading}>
+                                {savingSecurity ? 'Saving...' : 'Save Security Settings'}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Maintenance Mode Card */}
+                    <div style={containerStyle}>
+                        <label style={labelStyle}>Maintenance Mode</label>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Control site access for maintenance.</p>
                         
-                        <button type="submit" style={buttonStyle} disabled={savingSecurity || loading}>
-                            {savingSecurity ? 'Saving...' : 'Save Security Settings'}
-                        </button>
-                    </form>
-                </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+                            <div style={radioGroupStyle}>
+                                <label style={radioLabelStyle}>
+                                    <input type="radio" name="maintenanceMode" value="disabled" checked={!maintenanceSettings.enabled} onChange={() => setMaintenanceSettings(s => ({ ...s, enabled: false }))} />
+                                    Disabled (Live)
+                                </label>
+                                <label style={radioLabelStyle}>
+                                    <input type="radio" name="maintenanceMode" value="manual" checked={maintenanceSettings.enabled && maintenanceSettings.mode === 'manual'} onChange={() => setMaintenanceSettings(s => ({ ...s, enabled: true, mode: 'manual' }))} />
+                                    Enabled (Manual)
+                                </label>
+                                <label style={radioLabelStyle}>
+                                    <input type="radio" name="maintenanceMode" value="scheduled" checked={maintenanceSettings.enabled && maintenanceSettings.mode === 'scheduled'} onChange={() => setMaintenanceSettings(s => ({ ...s, enabled: true, mode: 'scheduled' }))} />
+                                    Live after Time Count
+                                </label>
+                            </div>
+
+                            {maintenanceSettings.enabled && maintenanceSettings.mode === 'scheduled' && (
+                                <div style={{ backgroundColor: 'var(--bg-main)', padding: '1rem', borderRadius: '8px' }}>
+                                    <label style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>Show Maintenance Popup For:</label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.8rem' }}>Days</label>
+                                            <input type="number" min="0" value={maintenanceDuration.days} onChange={e => setMaintenanceDuration(d => ({ ...d, days: parseInt(e.target.value) || 0 }))} style={inputStyle} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.8rem' }}>Hours</label>
+                                            <input type="number" min="0" max="23" value={maintenanceDuration.hours} onChange={e => setMaintenanceDuration(d => ({ ...d, hours: parseInt(e.target.value) || 0 }))} style={inputStyle} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.8rem' }}>Minutes</label>
+                                            <input type="number" min="0" max="59" value={maintenanceDuration.minutes} onChange={e => setMaintenanceDuration(d => ({ ...d, minutes: parseInt(e.target.value) || 0 }))} style={inputStyle} />
+                                        </div>
+                                    </div>
+                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                                        The site will automatically go live after this duration.
+                                    </p>
+                                </div>
+                            )}
+
+                            <button onClick={handleSaveMaintenance} style={buttonStyle} disabled={savingMaintenance}>
+                                {savingMaintenance ? 'Saving...' : 'Update Maintenance Mode'}
+                            </button>
+                        </div>
+                    </div>
+                </>
             )}
 
             {activeTab === 'deposit' && (
-                <div style={containerStyle}>
-                    <form onSubmit={handleSaveDepositSettings}>
-                        <label style={labelStyle}>Deposit Gateway Settings</label>
-                        {loading ? <p>Loading settings...</p> : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <>
+                    {/* Financial Limits */}
+                    <div style={containerStyle}>
+                        <form onSubmit={handleSaveFinancials}>
+                            <label style={labelStyle}>Financial Limits</label>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                                 <div>
-                                    <p style={{ fontWeight: 500, margin: 0 }}>Active Gateway</p>
-                                    <div style={radioGroupStyle}>
-                                        <label style={radioLabelStyle}><input type="radio" name="gateway" value="offline" checked={depositSettings.active_gateway === 'offline'} onChange={() => setDepositSettings(s => ({...s, active_gateway: 'offline'}))} /> Offline</label>
-                                        <label style={radioLabelStyle}><input type="radio" name="gateway" value="uddoktapay" checked={depositSettings.active_gateway === 'uddoktapay'} onChange={() => setDepositSettings(s => ({...s, active_gateway: 'uddoktapay'}))} /> UddoktaPay</label>
-                                        <label style={radioLabelStyle}><input type="radio" name="gateway" value="paytm" checked={depositSettings.active_gateway === 'paytm'} onChange={() => setDepositSettings(s => ({...s, active_gateway: 'paytm'}))} /> Paytm</label>
-                                        <label style={radioLabelStyle}><input type="radio" name="gateway" value="razorpay" checked={depositSettings.active_gateway === 'razorpay'} onChange={() => setDepositSettings(s => ({...s, active_gateway: 'razorpay'}))} /> Razorpay</label>
-                                    </div>
+                                    <label style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>Min Deposit ({currencySymbol})</label>
+                                    <input type="number" value={financialLimits.min_deposit} onChange={e => setFinancialLimits(f => ({...f, min_deposit: Number(e.target.value)}))} style={inputStyle} />
                                 </div>
-                                
-                                {depositSettings.active_gateway === 'offline' && (
-                                    <>
-                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
-                                        <div>
-                                            <h3 style={{marginTop: 0}}>Offline Payment Methods</h3>
-                                            <p style={{color: 'var(--text-secondary)', fontSize: '0.9rem'}}>Manage the payment methods (e.g., Bkash, Nagad) displayed to users for manual deposits.</p>
-                                            
-                                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1.5rem', backgroundColor: 'var(--bg-main)', padding: '1rem', borderRadius: '8px'}}>
-                                                <div>
-                                                    <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Method Name</label>
-                                                    <input type="text" placeholder="e.g. Bkash Personal" value={newMethodName} onChange={e => setNewMethodName(e.target.value)} style={inputStyle} />
-                                                </div>
-                                                <div>
-                                                    <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Wallet Number</label>
-                                                    <input type="text" placeholder="e.g. 017..." value={newMethodNumber} onChange={e => setNewMethodNumber(e.target.value)} style={inputStyle} />
-                                                </div>
-                                                <div>
-                                                     <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Method Logo</label>
-                                                     <input 
-                                                        type="file" 
-                                                        accept="image/*" 
-                                                        onChange={e => setNewMethodLogoFile(e.target.files ? e.target.files[0] : null)} 
-                                                        style={{border: '1px solid var(--border-color)', padding: '4px', borderRadius: '4px', backgroundColor: 'var(--input-bg)', width: '100%', color: 'var(--text-main)'}} 
-                                                     />
-                                                </div>
-                                                <button type="button" onClick={handleAddMethod} disabled={uploadingLogo} style={{...buttonStyle, marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                                                    {uploadingLogo ? 'Uploading...' : <><div dangerouslySetInnerHTML={{__html: PlusIconSVG()}} /> Add</>}
-                                                </button>
-                                            </div>
-
-                                            <div>
-                                                {depositSettings.offline.methods?.map(method => (
-                                                    <div key={method.id} style={methodCardStyle}>
-                                                        <div style={{display: 'flex', alignItems: 'center'}}>
-                                                            {method.logo_url ? (
-                                                                <img src={method.logo_url} alt={method.name} style={methodLogoStyle} />
-                                                            ) : (
-                                                                <div style={{...methodLogoStyle, backgroundColor: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '10px'}}>NO LOGO</div>
-                                                            )}
-                                                            <div>
-                                                                <div style={{fontWeight: 'bold'}}>{method.name}</div>
-                                                                <div style={{fontFamily: 'monospace', color: 'var(--text-secondary)'}}>{method.number}</div>
-                                                            </div>
-                                                        </div>
-                                                        <button type="button" onClick={() => handleDeleteMethod(method.id)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#e53e3e'}}>
-                                                            <div dangerouslySetInnerHTML={{__html: TrashIconSVG()}} />
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                                {(!depositSettings.offline.methods || depositSettings.offline.methods.length === 0) && (
-                                                    <p style={{color: '#999', textAlign: 'center', fontStyle: 'italic'}}>No payment methods added yet.</p>
-                                                )}
-                                            </div>
-
-                                            <div style={{marginTop: '1.5rem'}}>
-                                                <label style={{...labelStyle, fontSize: '1rem'}}>General Instructions (Optional)</label>
-                                                <textarea 
-                                                    value={depositSettings.offline.instructions} 
-                                                    onChange={e => setDepositSettings(s => ({...s, offline: {...s.offline, instructions: e.target.value}}))} 
-                                                    style={{width: '100%', minHeight: '80px', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.95rem', background: 'var(--input-bg)', color: 'var(--text-main)'}} 
-                                                    placeholder="Any extra instructions for the user..."
-                                                />
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                                
-                                {depositSettings.active_gateway === 'uddoktapay' && (
-                                    <>
-                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
-                                        <div>
-                                            <h3 style={{marginTop: 0}}>UddoktaPay Settings</h3>
-                                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
-                                                <div><label style={{...labelStyle, fontSize: '1rem'}}>API Key</label><input type="text" value={depositSettings.uddoktapay.api_key} onChange={e => setDepositSettings(s => ({...s, uddoktapay: {...s.uddoktapay, api_key: e.target.value}}))} style={inputStyle} /></div>
-                                                <div><label style={{...labelStyle, fontSize: '1rem'}}>API URL</label><input type="text" value={depositSettings.uddoktapay.api_url} onChange={e => setDepositSettings(s => ({...s, uddoktapay: {...s.uddoktapay, api_url: e.target.value}}))} style={inputStyle} /></div>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                                
-                                {depositSettings.active_gateway === 'paytm' && (
-                                    <>
-                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
-                                        <div>
-                                            <h3 style={{marginTop: 0}}>Paytm Settings</h3>
-                                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
-                                                <div><label style={{...labelStyle, fontSize: '1rem'}}>Merchant ID (MID)</label><input type="text" value={depositSettings.paytm.merchant_id} onChange={e => setDepositSettings(s => ({...s, paytm: {...s.paytm, merchant_id: e.target.value}}))} style={inputStyle} /></div>
-                                                <div><label style={{...labelStyle, fontSize: '1rem'}}>Merchant Key</label><input type="text" value={depositSettings.paytm.merchant_key} onChange={e => setDepositSettings(s => ({...s, paytm: {...s.paytm, merchant_key: e.target.value}}))} style={inputStyle} /></div>
-                                                <div>
-                                                    <label style={{...labelStyle, fontSize: '1rem'}}>Website</label>
-                                                    <select 
-                                                        value={depositSettings.paytm.website} 
-                                                        onChange={e => setDepositSettings(s => ({...s, paytm: {...s.paytm, website: e.target.value}}))} 
-                                                        style={inputStyle}
-                                                    >
-                                                        <option value="WEBSTAGING">Testing (WEBSTAGING)</option>
-                                                        <option value="DEFAULT">Production (DEFAULT)</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-
-                                {depositSettings.active_gateway === 'razorpay' && (
-                                    <>
-                                        <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
-                                        <div>
-                                            <h3 style={{marginTop: 0}}>Razorpay Settings</h3>
-                                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
-                                                <div><label style={{...labelStyle, fontSize: '1rem'}}>Key ID</label><input type="text" value={depositSettings.razorpay.key_id} onChange={e => setDepositSettings(s => ({...s, razorpay: {...s.razorpay, key_id: e.target.value}}))} style={inputStyle} /></div>
-                                                <div><label style={{...labelStyle, fontSize: '1rem'}}>Key Secret</label><input type="text" value={depositSettings.razorpay.key_secret} onChange={e => setDepositSettings(s => ({...s, razorpay: {...s.razorpay, key_secret: e.target.value}}))} style={inputStyle} /></div>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
+                                <div>
+                                    <label style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>Min Withdraw ({currencySymbol})</label>
+                                    <input type="number" value={financialLimits.min_withdraw} onChange={e => setFinancialLimits(f => ({...f, min_withdraw: Number(e.target.value)}))} style={inputStyle} />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>Withdraw Fee ({currencySymbol})</label>
+                                    <input type="number" value={financialLimits.withdraw_fee} onChange={e => setFinancialLimits(f => ({...f, withdraw_fee: Number(e.target.value)}))} style={inputStyle} />
+                                </div>
                             </div>
-                        )}
-                        <button type="submit" style={buttonStyle} disabled={savingDeposit || loading}>
-                            {savingDeposit ? 'Saving...' : 'Save Deposit Settings'}
-                        </button>
-                    </form>
-                </div>
+                            <button type="submit" style={buttonStyle} disabled={savingFinancials}>
+                                {savingFinancials ? 'Saving...' : 'Update Limits'}
+                            </button>
+                        </form>
+                    </div>
+
+                    <div style={containerStyle}>
+                        <form onSubmit={handleSaveDepositSettings}>
+                            <label style={labelStyle}>Deposit Gateway Settings</label>
+                            {loading ? <p>Loading settings...</p> : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                    <div>
+                                        <p style={{ fontWeight: 500, margin: 0 }}>Active Gateway</p>
+                                        <div style={radioGroupStyle}>
+                                            <label style={radioLabelStyle}><input type="radio" name="gateway" value="offline" checked={depositSettings.active_gateway === 'offline'} onChange={() => setDepositSettings(s => ({...s, active_gateway: 'offline'}))} /> Offline</label>
+                                            <label style={radioLabelStyle}><input type="radio" name="gateway" value="uddoktapay" checked={depositSettings.active_gateway === 'uddoktapay'} onChange={() => setDepositSettings(s => ({...s, active_gateway: 'uddoktapay'}))} /> UddoktaPay</label>
+                                            <label style={radioLabelStyle}><input type="radio" name="gateway" value="paytm" checked={depositSettings.active_gateway === 'paytm'} onChange={() => setDepositSettings(s => ({...s, active_gateway: 'paytm'}))} /> Paytm</label>
+                                            <label style={radioLabelStyle}><input type="radio" name="gateway" value="razorpay" checked={depositSettings.active_gateway === 'razorpay'} onChange={() => setDepositSettings(s => ({...s, active_gateway: 'razorpay'}))} /> Razorpay</label>
+                                        </div>
+                                    </div>
+                                    
+                                    {depositSettings.active_gateway === 'offline' && (
+                                        <>
+                                            <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
+                                            <div>
+                                                <h3 style={{marginTop: 0}}>Offline Payment Methods</h3>
+                                                <p style={{color: 'var(--text-secondary)', fontSize: '0.9rem'}}>Manage the payment methods (e.g., Bkash, Nagad) displayed to users for manual deposits.</p>
+                                                
+                                                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1.5rem', backgroundColor: 'var(--bg-main)', padding: '1rem', borderRadius: '8px'}}>
+                                                    <div>
+                                                        <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Method Name</label>
+                                                        <input type="text" placeholder="e.g. Bkash Personal" value={newMethodName} onChange={e => setNewMethodName(e.target.value)} style={inputStyle} />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Wallet Number</label>
+                                                        <input type="text" placeholder="e.g. 017..." value={newMethodNumber} onChange={e => setNewMethodNumber(e.target.value)} style={inputStyle} />
+                                                    </div>
+                                                    <div>
+                                                         <label style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>Method Logo</label>
+                                                         <input 
+                                                            type="file" 
+                                                            accept="image/*" 
+                                                            onChange={e => setNewMethodLogoFile(e.target.files ? e.target.files[0] : null)} 
+                                                            style={{border: '1px solid var(--border-color)', padding: '4px', borderRadius: '4px', backgroundColor: 'var(--input-bg)', width: '100%', color: 'var(--text-main)'}} 
+                                                         />
+                                                    </div>
+                                                    <button type="button" onClick={handleAddMethod} disabled={uploadingLogo} style={{...buttonStyle, marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                                                        {uploadingLogo ? 'Uploading...' : <><div dangerouslySetInnerHTML={{__html: PlusIconSVG()}} /> Add</>}
+                                                    </button>
+                                                </div>
+
+                                                <div>
+                                                    {depositSettings.offline.methods?.map(method => (
+                                                        <div key={method.id} style={methodCardStyle}>
+                                                            <div style={{display: 'flex', alignItems: 'center'}}>
+                                                                {method.logo_url ? (
+                                                                    <img src={method.logo_url} alt={method.name} style={methodLogoStyle} />
+                                                                ) : (
+                                                                    <div style={{...methodLogoStyle, backgroundColor: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '10px'}}>NO LOGO</div>
+                                                                )}
+                                                                <div>
+                                                                    <div style={{fontWeight: 'bold'}}>{method.name}</div>
+                                                                    <div style={{fontFamily: 'monospace', color: 'var(--text-secondary)'}}>{method.number}</div>
+                                                                </div>
+                                                            </div>
+                                                            <button type="button" onClick={() => handleDeleteMethod(method.id)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#e53e3e'}}>
+                                                                <div dangerouslySetInnerHTML={{__html: TrashIconSVG()}} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    {(!depositSettings.offline.methods || depositSettings.offline.methods.length === 0) && (
+                                                        <p style={{color: '#999', textAlign: 'center', fontStyle: 'italic'}}>No payment methods added yet.</p>
+                                                    )}
+                                                </div>
+
+                                                <div style={{marginTop: '1.5rem'}}>
+                                                    <label style={{...labelStyle, fontSize: '1rem'}}>General Instructions (Optional)</label>
+                                                    <textarea 
+                                                        value={depositSettings.offline.instructions} 
+                                                        onChange={e => setDepositSettings(s => ({...s, offline: {...s.offline, instructions: e.target.value}}))} 
+                                                        style={{width: '100%', minHeight: '80px', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.95rem', background: 'var(--input-bg)', color: 'var(--text-main)'}} 
+                                                        placeholder="Any extra instructions for the user..."
+                                                    />
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                    
+                                    {depositSettings.active_gateway === 'uddoktapay' && (
+                                        <>
+                                            <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
+                                            <div>
+                                                <h3 style={{marginTop: 0}}>UddoktaPay Settings</h3>
+                                                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+                                                    <div><label style={{...labelStyle, fontSize: '1rem'}}>API Key</label><input type="text" value={depositSettings.uddoktapay.api_key} onChange={e => setDepositSettings(s => ({...s, uddoktapay: {...s.uddoktapay, api_key: e.target.value}}))} style={inputStyle} /></div>
+                                                    <div><label style={{...labelStyle, fontSize: '1rem'}}>API URL</label><input type="text" value={depositSettings.uddoktapay.api_url} onChange={e => setDepositSettings(s => ({...s, uddoktapay: {...s.uddoktapay, api_url: e.target.value}}))} style={inputStyle} /></div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                    
+                                    {depositSettings.active_gateway === 'paytm' && (
+                                        <>
+                                            <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
+                                            <div>
+                                                <h3 style={{marginTop: 0}}>Paytm Settings</h3>
+                                                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+                                                    <div><label style={{...labelStyle, fontSize: '1rem'}}>Merchant ID (MID)</label><input type="text" value={depositSettings.paytm.merchant_id} onChange={e => setDepositSettings(s => ({...s, paytm: {...s.paytm, merchant_id: e.target.value}}))} style={inputStyle} /></div>
+                                                    <div><label style={{...labelStyle, fontSize: '1rem'}}>Merchant Key</label><input type="text" value={depositSettings.paytm.merchant_key} onChange={e => setDepositSettings(s => ({...s, paytm: {...s.paytm, merchant_key: e.target.value}}))} style={inputStyle} /></div>
+                                                    <div>
+                                                        <label style={{...labelStyle, fontSize: '1rem'}}>Website</label>
+                                                        <select 
+                                                            value={depositSettings.paytm.website} 
+                                                            onChange={e => setDepositSettings(s => ({...s, paytm: {...s.paytm, website: e.target.value}}))} 
+                                                            style={inputStyle}
+                                                        >
+                                                            <option value="WEBSTAGING">Testing (WEBSTAGING)</option>
+                                                            <option value="DEFAULT">Production (DEFAULT)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {depositSettings.active_gateway === 'razorpay' && (
+                                        <>
+                                            <hr style={{border: 'none', borderTop: '1px solid var(--border-color)'}} />
+                                            <div>
+                                                <h3 style={{marginTop: 0}}>Razorpay Settings</h3>
+                                                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+                                                    <div><label style={{...labelStyle, fontSize: '1rem'}}>Key ID</label><input type="text" value={depositSettings.razorpay.key_id} onChange={e => setDepositSettings(s => ({...s, razorpay: {...s.razorpay, key_id: e.target.value}}))} style={inputStyle} /></div>
+                                                    <div><label style={{...labelStyle, fontSize: '1rem'}}>Key Secret</label><input type="text" value={depositSettings.razorpay.key_secret} onChange={e => setDepositSettings(s => ({...s, razorpay: {...s.razorpay, key_secret: e.target.value}}))} style={inputStyle} /></div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                            <button type="submit" style={buttonStyle} disabled={savingDeposit || loading}>
+                                {savingDeposit ? 'Saving...' : 'Save Deposit Settings'}
+                            </button>
+                        </form>
+                    </div>
+                </>
             )}
 
             {activeTab === 'videos' && (

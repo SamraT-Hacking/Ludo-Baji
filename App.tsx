@@ -37,6 +37,7 @@ import ServerSetupGuide from './components/ServerSetupGuide';
 import GameOverModal from './components/GameOverModal';
 import SimpleMessageModal from './components/SimpleMessageModal';
 import LicenseActivation from './components/LicenseActivation';
+import MaintenancePage from './components/MaintenancePage';
 
 // Import Language Provider
 import { LanguageProvider } from './contexts/LanguageContext';
@@ -79,700 +80,338 @@ function App() {
   
   const [appConfig, setAppConfig] = useState({
       appTitle: 'Dream Ludo',
-      currencySymbol: '৳'
+      currencySymbol: '৳',
   });
-  
-  const [appTheme, setAppTheme] = useState<'light' | 'dark'>('light');
 
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  
-  const [isSessionLoading, setIsSessionLoading] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [showLandingPage, setShowLandingPage] = useState(true);
 
-  const [showAuth, setShowAuth] = useState(false);
-  const [showBanNotice, setShowBanNotice] = useState(false);
+  // Maintenance Mode State
+  const [maintenanceMode, setMaintenanceMode] = useState<{ enabled: boolean; mode: 'manual' | 'scheduled'; end_time: string | null }>({
+      enabled: false,
+      mode: 'manual',
+      end_time: null
+  });
+  const [loadingMaintenance, setLoadingMaintenance] = useState(true);
 
-  const playerName = session?.user?.user_metadata?.full_name || session?.user?.email || 'Player';
-  const playerId = session?.user?.id || null;
-  const sessionToken = session?.access_token || null;
-
-  const { gameState, connectionStatus, error, startGame, rollDice, movePiece, leaveGame, sendChatMessage } = useGameServer(gameCode, sessionToken);
-  
-  // License Check on Mount
-  useEffect(() => {
-    const checkDomainLicense = async () => {
-        try {
-            const currentDomain = window.location.hostname;
-            // Skip check for localhost dev if you want, but user asked for strict system.
-            // We will check against the server.
-            
-            const response = await fetch(`${LICENSE_SERVER_URL}/api/check-domain`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ domain: currentDomain })
-            });
-
-            const data = await response.json();
-
-            if (response.ok && data.active) {
-                setIsLicensed(true);
-                setLicenseError(null);
-            } else {
-                setIsLicensed(false);
-                setLicenseError(data.message || 'This domain is not activated.');
-            }
-        } catch (err) {
-            console.error("License check error:", err);
-            // If network fails, we default to blocked to ensure security,
-            // or show a "Connecting..." state. Here we block and show error.
-            setIsLicensed(false);
-            setLicenseError("Cannot connect to license server.");
-        } finally {
-            setCheckingLicense(false);
-        }
-    };
-
-    checkDomainLicense();
-  }, []);
-
+  // Version Check
   useEffect(() => {
       checkAppVersion();
   }, []);
 
+  // License Check
   useEffect(() => {
-    const savedTheme = localStorage.getItem('appTheme') as 'light' | 'dark';
-    if (savedTheme) {
-        setAppTheme(savedTheme);
-    } else {
-        setAppTheme('light');
-        localStorage.setItem('appTheme', 'light');
-    }
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', appTheme);
-    localStorage.setItem('appTheme', appTheme);
-  }, [appTheme]);
-
-  const toggleAppTheme = () => {
-      setAppTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
-
-  useEffect(() => {
-    let inactivityTimer: ReturnType<typeof setTimeout>;
-
-    const resetInactivityTimer = () => {
-        if (inactivityTimer) clearTimeout(inactivityTimer);
-        inactivityTimer = setTimeout(() => {
-            console.log("User inactive for 1 hour. Refreshing session...");
-            try {
-                sessionStorage.removeItem('ludoGameCode');
-                sessionStorage.removeItem('pendingTransactionId');
-            } catch (e) {
-                console.warn("Could not clear session storage", e);
-            }
-            window.location.reload();
-        }, 3600000); // 1 hour in ms
-    };
-
-    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
-    events.forEach(event => document.addEventListener(event, resetInactivityTimer));
-
-    resetInactivityTimer();
-
-    return () => {
-        if (inactivityTimer) clearTimeout(inactivityTimer);
-        events.forEach(event => document.removeEventListener(event, resetInactivityTimer));
-    };
-  }, []);
-
-  useEffect(() => {
-      if (!supabase) return;
-      const fetchConfig = async () => {
-          const { data, error } = await supabase
-              .from('app_settings')
-              .select('value')
-              .eq('key', 'app_config')
-              .single();
-          
-          if (data && data.value) {
-              const { title, currencySymbol } = data.value as any;
-              setAppConfig({
-                  appTitle: title || 'Dream Ludo',
-                  currencySymbol: currencySymbol || '৳'
+      const verifyLicense = async () => {
+          try {
+              const response = await fetch(`${LICENSE_SERVER_URL}/api/check-domain`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ domain: window.location.hostname })
               });
+              
+              if (!response.ok) throw new Error('Server check failed');
+              const data = await response.json();
+              
+              if (data.active) {
+                  setIsLicensed(true);
+              } else {
+                  setIsLicensed(false);
+                  setLicenseError(data.message || 'License not active.');
+              }
+          } catch (err) {
+              console.error("License Check Failed:", err);
+              // In production, strict mode would block access.
+              // For now, if server is unreachable, we might allow access or block.
+              // Here we assume strict: block if cannot verify.
+              setIsLicensed(false);
+              setLicenseError('Could not connect to licensing server.');
+          } finally {
+              setCheckingLicense(false);
           }
       };
-      fetchConfig();
-      
-      document.title = appConfig.appTitle;
-
-      const channel = supabase.channel('public:app_settings:config')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: "key=eq.app_config" }, payload => {
-            const newVal = payload.new as any;
-            if (newVal && newVal.value) {
-                 setAppConfig({
-                    appTitle: newVal.value.title || 'Dream Ludo',
-                    currencySymbol: newVal.value.currencySymbol || '৳'
-                });
-            }
-        })
-        .subscribe();
-        
-      return () => { supabase.removeChannel(channel); };
-  }, [appConfig.appTitle]);
-
-  useEffect(() => {
-      document.title = appConfig.appTitle;
-  }, [appConfig.appTitle]);
-
-
-  const fetchUnreadCount = useCallback(async () => {
-    if (!supabase || !playerId) return;
-
-    const { data: readStatuses, error: readError } = await supabase
-        .from('notification_read_status')
-        .select('notification_id')
-        .eq('user_id', playerId);
-
-    if (readError) {
-        console.error("Error fetching read statuses:", readError);
-        return;
-    }
-    const readNotificationIds = readStatuses.map(s => s.notification_id);
-
-    let query = supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true });
-
-    if (readNotificationIds.length > 0) {
-        query = query.not('id', 'in', `(${readNotificationIds.join(',')})`);
-    }
-    
-    const { count, error: unreadError } = await query;
-        
-    if (!unreadError) {
-        setUnreadCount(count || 0);
-    } else {
-        console.error("Error fetching unread count:", unreadError);
-    }
-  }, [playerId]);
-  
-  const setView = (view: View) => {
-    const path = view === 'admin' ? '/admin/dashboard' : `/${view}`;
-    history.pushState({ view }, '', `/#${path}`);
-    setCurrentView(view);
-    setIsMoreMenuOpen(false);
-    setIsNotificationsOpen(false);
-    setSelectedTournament(null);
-    setSelectedNotification(null);
-  };
-
-  useEffect(() => {
-    if (sessionStorage.getItem('showBanNotice') === 'true') {
-        setShowBanNotice(true);
-        sessionStorage.removeItem('showBanNotice');
-    }
+      verifyLicense();
   }, []);
 
+  // Initial Data Fetch (Session, Admin Status, Config, Maintenance)
   useEffect(() => {
     if (!supabase) return;
 
-    const checkAdminRole = async (): Promise<boolean> => {
-        try {
-            const { data, error } = await supabase.rpc('is_admin');
-            if (error) throw error;
-            const adminStatus = !!data;
-            setIsAdmin(adminStatus);
-            
-            if (adminStatus) {
-                const hash = window.location.hash;
-                if (!hash || hash === '#/' || hash === '') {
-                    setView('admin');
-                }
-            }
-            return adminStatus;
-        } catch (error: any) {
-            console.error('Error checking admin role:', error.message || error);
-            setIsAdmin(false);
-            return false;
-        }
+    const initData = async () => {
+      const { data: { session } } = await (supabase.auth as any).getSession();
+      setSession(session);
+      if (session) {
+          const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+          if (data?.role === 'admin') setIsAdmin(true);
+      }
+
+      const { data: settingsData } = await supabase.from('app_settings').select('key, value');
+      if (settingsData) {
+          const getSetting = (key: string) => settingsData.find(s => s.key === key)?.value;
+          
+          const statusVal = getSetting('admin_status');
+          if (statusVal) setAdminStatus(statusVal.status);
+          
+          const configVal = getSetting('app_config');
+          if (configVal) setAppConfig(configVal);
+
+          const commissionVal = getSetting('admin_commission_percent');
+          if (commissionVal) setAdminCommission(commissionVal.percentage);
+
+          const maintenanceVal = getSetting('maintenance_mode');
+          if (maintenanceVal) setMaintenanceMode(maintenanceVal);
+      }
+      setLoadingMaintenance(false);
     };
-    
-    const getSession = async () => {
-        try {
-            const { data, error } = await (supabase.auth as any).getSession();
-            if (error) {
-                console.error("Error fetching session:", error);
-                setIsSessionLoading(false);
-                return;
-            }
-            
-            const currentSession = data.session;
-            setSession(currentSession);
-            if (currentSession?.user) {
-                await checkAdminRole();
-                await fetchUnreadCount();
-            }
-        } catch (e) {
-            console.error("Unexpected session check error", e);
-        } finally {
-            setIsSessionLoading(false);
-        }
-    }
-    
-    const sessionTimeout = setTimeout(() => {
-        if (isSessionLoading) {
-            setIsSessionLoading(false);
-        }
-    }, 3000); 
-    
-    getSession();
+
+    initData();
 
     const { data: { subscription } } = (supabase.auth as any).onAuthStateChange((_event: any, session: any) => {
-        setSession(session);
-        if (_event === 'SIGNED_IN' && session?.user) {
-            setShowAuth(false); 
-            checkAdminRole().then(isAdmin => {
-                const hash = window.location.hash;
-                if (!hash || hash === '#/' || hash === '') {
-                    if (!isAdmin) {
-                        setView('tournaments');
-                    }
-                }
+      setSession(session);
+      if (session) {
+          setShowLandingPage(false); // Auto-hide landing page on login
+          // Re-check admin status on login
+          supabase.from('profiles').select('role').eq('id', session.user.id).single()
+            .then(({ data }) => {
+                if (data?.role === 'admin') setIsAdmin(true);
+                else setIsAdmin(false);
             });
-            fetchUnreadCount();
-        }
-        if (_event === 'SIGNED_OUT') {
-            setGameCode(null);
-            setView('tournaments');
-            setIsAdmin(false);
-            setShowAuth(false); 
-            setShowBanNotice(false);
-            try {
-                sessionStorage.removeItem('ludoGameCode');
-            } catch (e) {
-                console.warn("Could not access sessionStorage to clear game code on logout.", e);
-            }
-        }
-    });
-    
-    const notificationsChannel = supabase
-      .channel('public:notifications')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, payload => {
-        fetchUnreadCount();
-      })
-      .subscribe();
-
-    return () => {
-        clearTimeout(sessionTimeout);
-        subscription.unsubscribe();
-        supabase.removeChannel(notificationsChannel);
-    };
-  }, [fetchUnreadCount]);
-  
-    useEffect(() => {
-        const handlePopState = (event: PopStateEvent) => {
-            const hash = window.location.hash.replace(/^#\//, '');
-            const [path] = hash.split('?');
-            const [viewStr, overlay] = path.split('/');
-            
-            const view = (viewStr as View) || 'tournaments';
-
-            setCurrentView(view);
-            setIsMoreMenuOpen(overlay === 'more');
-            setIsNotificationsOpen(overlay === 'notifications');
-            
-            if (overlay !== 'contest') {
-                setSelectedTournament(null);
-            }
-            if (overlay !== 'notification') {
-                setSelectedNotification(null);
-            }
-        };
-
-        window.addEventListener('popstate', handlePopState);
-        handlePopState({} as PopStateEvent); 
-
-        return () => window.removeEventListener('popstate', handlePopState);
-    }, []);
-    
-    const openMoreMenu = () => {
-        history.pushState({ view: currentView, modal: 'more' }, '', `/#/${currentView}/more`);
-        setIsMoreMenuOpen(true);
-    };
-
-    const openNotifications = () => {
-        history.pushState({ view: currentView, modal: 'notifications' }, '', `/#/${currentView}/notifications`);
-        setIsNotificationsOpen(true);
-    };
-
-    const viewContest = (tournament: Tournament) => {
-        history.pushState({ view: currentView, detail: 'contest', detailId: tournament.id }, '', `/#/${currentView}/contest/${tournament.id}`);
-        setSelectedTournament(tournament);
-    };
-
-    const viewNotification = (notification: Notification) => {
-        history.pushState({ view: currentView, detail: 'notification', detailId: notification.id }, '', `/#/${currentView}/notification/${notification.id}`);
-        setSelectedNotification(notification);
-    };
-
-    useEffect(() => {
-        if (!supabase) return;
-        
-        const fetchAppSettings = async () => {
-            const { data, error } = await supabase
-                .from('app_settings')
-                .select('key, value')
-                .in('key', ['admin_status', 'admin_commission_percent']);
-            
-            if (data) {
-                const statusSetting = data.find(s => s.key === 'admin_status');
-                if (statusSetting && statusSetting.value && typeof (statusSetting.value as any).status === 'string') {
-                    setAdminStatus((statusSetting.value as any).status);
-                }
-
-                const commissionSetting = data.find(s => s.key === 'admin_commission_percent');
-                if (commissionSetting && commissionSetting.value && typeof (commissionSetting.value as any).percentage === 'number') {
-                    setAdminCommission((commissionSetting.value as any).percentage);
-                }
-            }
-        };
-        
-        fetchAppSettings();
-
-        const channel = supabase
-          .channel('public:app_settings')
-          .on('postgres_changes', { 
-              event: '*', 
-              schema: 'public', 
-              table: 'app_settings',
-            }, 
-            payload => {
-                const record = payload.new as any;
-                if (record.key === 'admin_status') {
-                    const newStatus = record?.value?.status;
-                     if (newStatus === 'online' || newStatus === 'offline') {
-                        setAdminStatus(newStatus);
-                    }
-                } else if (record.key === 'admin_commission_percent') {
-                     const newCommission = record?.value?.percentage;
-                     if (typeof newCommission === 'number') {
-                         setAdminCommission(newCommission);
-                     }
-                }
-            }
-          )
-          .subscribe();
-          
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, []);
-    
-  useEffect(() => {
-    const rootElement = document.getElementById('root');
-    if (rootElement) {
-      if (gameCode || (!session && !showAuth)) { 
-        rootElement.style.paddingTop = '0';
       } else {
-        rootElement.style.paddingTop = '';
+          setShowLandingPage(true);
+          setIsAdmin(false);
       }
-    }
-    return () => {
-      if (rootElement) {
-        rootElement.style.paddingTop = '';
-      }
-    };
-  }, [gameCode, session, showAuth]);
+    });
 
-  const handleJoinGame = (code: string) => {
-    try {
-        sessionStorage.setItem('ludoGameCode', code);
-    } catch (e) {
-        console.warn("Could not access sessionStorage. Game state will not be preserved across reloads.", e);
-    }
-    setGameCode(code);
-    setSelectedTournament(null);
-  };
-  
-  const handleLeaveGame = () => {
-      leaveGame();
-      setGameCode(null);
-      try {
-          sessionStorage.removeItem('ludoGameCode');
-      } catch (e) {
-          console.warn("Could not access sessionStorage to clear game code.", e);
-      }
-  }
-
-  const handleLogout = useCallback(async () => {
-    if (supabase) {
-        setIsMoreMenuOpen(false);
-        await (supabase.auth as any).signOut();
-        setShowAuth(false);
-        setShowBanNotice(false);
-    }
+    return () => subscription.unsubscribe();
   }, []);
 
+  // Unread Notifications Count
   useEffect(() => {
-    if (!supabase || !playerId) return;
+      if (!supabase || !session) return;
+      const fetchUnread = async () => {
+          const { data: allNotifications } = await supabase.from('notifications').select('id');
+          if (allNotifications) {
+              const { count } = await supabase
+                  .from('notification_read_status')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('user_id', session.user.id);
+              const total = allNotifications.length;
+              const read = count || 0;
+              setUnreadCount(Math.max(0, total - read));
+          }
+      };
+      fetchUnread();
+      const interval = setInterval(fetchUnread, 60000);
+      return () => clearInterval(interval);
+  }, [session]);
 
-    const profileChannel = supabase.channel(`profile-changes-for-${playerId}`)
-        .on('postgres_changes', {
-            event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${playerId}`
-        }, (payload) => {
-            if ((payload.new as ProfileType).is_banned) {
-                alert('Your account has been suspended by an administrator.');
-                handleLogout(); 
-            }
-        })
-        .subscribe();
-    return () => { supabase.removeChannel(profileChannel); };
-  }, [playerId, handleLogout]);
-  
-  const handleEnterAdminView = () => {
-      setView('admin');
-  }
+  // Theme Management
+  const toggleAppTheme = useCallback(() => {
+      const newTheme = theme === 'classic' ? 'dark' : 'classic'; // Assuming 'modern' maps to dark mode styles conceptually or we strictly use 'light'/'dark' naming in future
+      // For now, let's stick to the ThemeName type but toggle between them.
+      // Wait, index.html uses data-theme="dark".
+      // Let's align React state with DOM attribute
+      const nextTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', nextTheme);
+      setTheme(nextTheme === 'dark' ? 'modern' : 'classic'); // Mapping: classic->light, modern->dark
+  }, [theme]);
 
-  const currentTheme = themes[theme];
+  // Use Game Hook
+  const { gameState, connectionStatus, error: gameError, startGame, rollDice, movePiece, leaveGame, sendChatMessage } = useGameServer(gameCode, session?.access_token);
 
-  const appStyle: React.CSSProperties = {
-    minHeight: '100vh',
-    transition: 'background-color 0.3s ease',
-    ...currentTheme,
-    backgroundColor: 'var(--app-background)',
+  // Handle Game Server Errors
+  useEffect(() => {
+      if (gameError) setServerError(gameError);
+  }, [gameError]);
+
+  const handleJoinGame = (code: string) => {
+      setGameCode(code);
   };
 
-  const renderCurrentView = () => {
-    let content;
-    switch (currentView) {
-        case 'dashboard':
-            content = <Dashboard setView={setView} />;
-            break;
-        case 'tournaments':
-            content = playerId ? <Tournaments userId={playerId} setView={setView} onViewContest={viewContest} /> : null;
-            break;
-        case 'wallet':
-            content = <Wallet />;
-            break;
-        case 'leaderboard':
-            content = <Leaderboard />;
-            break;
-        case 'profile':
-            content = session ? <Profile key={session.user.id} session={session} /> : <div>Loading...</div>;
-            break;
-        case 'how-to-play':
-            content = <HowToPlay />;
-            break;
-        case 'refer-and-earn':
-            content = <ReferAndEarn setView={setView} />;
-            break;
-        case 'refer-history':
-            content = <ReferHistory />;
-            break;
-        case 'refer-leaderboard':
-            content = <ReferLeaderboard />;
-            break;
-        case 'transaction-history':
-            content = <TransactionHistory />;
-            break;
-        case 'privacy-policy':
-            content = <PrivacyPolicy />;
-            break;
-        case 'faq':
-            content = <FAQ />;
-            break;
-        case 'support-chat':
-            content = <SupportChat />;
-            break;
-        case 'about-us':
-            content = <AboutUs />;
-            break;
-        case 'terms-and-conditions':
-            content = <TermsAndConditions />;
-            break;
-        case 'global-chat':
-            content = <GlobalChat />;
-            break;
-        default:
-            content = playerId ? <Tournaments userId={playerId} setView={setView} onViewContest={viewContest} /> : null;
-            break;
-    }
-    
-    if (currentView !== 'tournaments' && currentView !== 'global-chat') {
-        return <div className="page-content">{content}</div>;
-    }
-    return content;
+  const handleResetGame = () => {
+      leaveGame();
+      setGameCode(null);
+  };
+
+  const handleNavigateToLogin = () => {
+      setShowLandingPage(false);
+  };
+
+  // --- RENDER LOGIC ---
+
+  if (checkingLicense || loadingMaintenance) {
+      return <LoadingScreen message="Initializing..." />;
   }
 
-  const renderContent = () => {
-    if (checkingLicense) {
-        return <LoadingScreen message="Connecting..." />; 
-    }
+  if (!isLicensed) {
+      return <LicenseActivation 
+          onActivationSuccess={() => window.location.reload()} 
+          initialError={licenseError}
+          serverUrl={LICENSE_SERVER_URL}
+      />;
+  }
 
-    // If license is not active, show activation screen
-    if (!isLicensed) {
-        return <LicenseActivation 
-                    onActivationSuccess={() => { setIsLicensed(true); setLicenseError(null); }} 
-                    initialError={licenseError}
-                    serverUrl={LICENSE_SERVER_URL} 
-               />;
-    }
+  // Maintenance Mode Check
+  // If enabled AND user is NOT admin AND (manual mode OR scheduled time is in future)
+  if (maintenanceMode.enabled && !isAdmin) {
+      const isManual = maintenanceMode.mode === 'manual';
+      const isFuture = maintenanceMode.end_time && new Date(maintenanceMode.end_time) > new Date();
+      
+      if (isManual || isFuture) {
+          return <MaintenancePage endTime={maintenanceMode.end_time} />;
+      }
+  }
 
-    if (isSessionLoading) {
-        return <LoadingScreen message="Loading..." />;
-    }
+  if (!session) {
+      if (showLandingPage) {
+          return <AppConfigContext.Provider value={appConfig}>
+                    <Home onNavigateToLogin={handleNavigateToLogin} />
+                 </AppConfigContext.Provider>;
+      }
+      return <LanguageProvider><Auth /></LanguageProvider>;
+  }
 
-    if (showBanNotice) {
-        return <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)'}}><Auth /></div>;
-    }
+  if (serverError) {
+      return <ServerSetupGuide error={serverError} onDismiss={() => setServerError(null)} />;
+  }
 
-    if (!session) {
-        if (showAuth) {
-            return <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)'}}><Auth /></div>;
-        }
-        return <Home onNavigateToLogin={() => setShowAuth(true)} />;
-    }
-    
-    if (gameCode) {
-        if (connectionStatus === 'connecting') {
-            return <LoadingScreen message="Connecting to Game Server..." />;
-        }
-        if (connectionStatus === 'reconnecting') {
-            return <LoadingScreen message="Connection lost. Reconnecting..." />;
-        }
-        
-        if (connectionStatus === 'disconnected' && gameState && gameState.gameStatus === GameStatus.Finished) {
-            return (
-                <GameOverModal
-                    winner={gameState.winner}
-                    players={gameState.players}
-                    onReset={() => { setGameCode(null); try { sessionStorage.removeItem('ludoGameCode'); } catch (e) { console.warn("Could not access sessionStorage.", e); } }}
-                    isArchived={true}
-                    gameId={gameState.gameId}
-                />
-            );
-        }
+  // If in a game
+  if (gameCode && gameState) {
+      return (
+          <AppConfigContext.Provider value={appConfig}>
+              <Game
+                  state={gameState}
+                  rollDice={rollDice}
+                  movePiece={movePiece}
+                  setAnimating={() => {}}
+                  resetGame={handleResetGame}
+                  playerId={session.user.id}
+                  sendChatMessage={sendChatMessage}
+              />
+          </AppConfigContext.Provider>
+      );
+  }
 
-        if (connectionStatus === 'disconnected' && error) {
-            if (error.includes('This game has already been played.')) {
-                return (
-                    <SimpleMessageModal
-                        title="Match Over"
-                        message={error}
-                        onClose={() => { setGameCode(null); try { sessionStorage.removeItem('ludoGameCode'); } catch (e) { console.warn("Could not access sessionStorage.", e); } }}
-                    />
-                );
-            }
-            return (
-                <ServerSetupGuide 
-                    error={error}
-                    onDismiss={() => { setGameCode(null); try { sessionStorage.removeItem('ludoGameCode'); } catch (e) { console.warn("Could not access sessionStorage.", e); } }}
-                />
-            )
-        }
-    }
+  // If in Lobby
+  if (gameCode && !gameState) {
+       return (
+           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+               <div className="spinner"></div>
+               <p style={{marginLeft: '1rem'}}>Connecting to game server...</p>
+               <button onClick={() => setGameCode(null)} style={{marginLeft: '1rem', padding: '0.5rem 1rem', background: '#e53e3e', color: 'white', border: 'none', borderRadius: '4px'}}>Cancel</button>
+           </div>
+       );
+  }
 
-    if (gameCode && gameState && connectionStatus === 'connected') {
-        if (gameState.gameStatus === GameStatus.Setup) {
-            return <Lobby gameId={gameCode} gameState={gameState} onStartGame={startGame} playerId={playerId} onLeave={handleLeaveGame} />;
-        }
-        return (
-          <Game 
-            state={gameState} 
-            rollDice={rollDice} 
-            movePiece={movePiece} 
-            setAnimating={() => {}} 
-            resetGame={handleLeaveGame}
-            playerId={playerId}
-            forceSync={() => {}}
-            sendChatMessage={sendChatMessage}
-          />
-        );
-    }
-    
-    if (isAdmin && currentView === 'admin') {
-        return (
-            <AdminPanel 
-                onExit={() => setView('dashboard')} 
-                onLogout={handleLogout} 
-                appTheme={appTheme}
-                toggleAppTheme={toggleAppTheme}
-            />
-        );
-    }
-    
-    if (selectedTournament && playerId) {
-        return (
-            <>
-                <Header unreadCount={unreadCount} onBellClick={openNotifications} adminStatus={adminStatus} />
-                <ContestDetails
-                    tournament={selectedTournament}
-                    onPlayNow={handleJoinGame}
-                    userId={playerId}
-                    adminCommission={adminCommission}
-                />
-            </>
-        );
-    }
+  if (currentView === 'admin' && isAdmin) {
+      return (
+          <LanguageProvider>
+              <AppConfigContext.Provider value={appConfig}>
+                  <AdminPanel 
+                      onExit={() => setCurrentView('dashboard')} 
+                      onLogout={() => supabase?.auth.signOut()}
+                      appTheme={theme === 'classic' ? 'light' : 'dark'}
+                      toggleAppTheme={toggleAppTheme}
+                  />
+              </AppConfigContext.Provider>
+          </LanguageProvider>
+      );
+  }
 
-    if (selectedNotification) {
-        return (
-            <>
-                <Header unreadCount={unreadCount} onBellClick={openNotifications} adminStatus={adminStatus} />
-                <NotificationDetails notification={selectedNotification} />
-            </>
-        );
-    }
-
-    return (
-        <>
-            <Header unreadCount={unreadCount} onBellClick={openNotifications} adminStatus={adminStatus} />
-            <main className="main-content-area">
-                {renderCurrentView()}
-            </main>
-            <FooterNav
-                currentView={currentView}
-                setView={setView}
-                onMoreClick={openMoreMenu}
-            />
-            {isMoreMenuOpen && (
-                <MoreMenu
-                    setView={setView}
-                    onLogout={handleLogout}
-                    isAdmin={isAdmin}
-                    onEnterAdminView={handleEnterAdminView}
-                    appTheme={appTheme}
-                    toggleAppTheme={toggleAppTheme}
-                />
-            )}
-            {isNotificationsOpen && (
-                <NotificationsList
-                    onViewNotification={viewNotification}
-                    setUnreadCount={setUnreadCount}
-                />
-            )}
-            {session && (
-                <>
-                    <SupportChatWidget />
-                    <div style={{ zIndex: 997 }}>
-                         <React.Fragment /> 
-                    </div>
-                </>
-            )}
-        </>
-    )
+  const handleViewContest = (tournament: Tournament) => {
+      setSelectedTournament(tournament);
   };
+
+  if (selectedTournament) {
+      return (
+          <LanguageProvider>
+              <AppConfigContext.Provider value={appConfig}>
+                  <ContestDetails 
+                      tournament={selectedTournament} 
+                      onPlayNow={(code) => setGameCode(code)} 
+                      userId={session.user.id}
+                      adminCommission={adminCommission}
+                  />
+              </AppConfigContext.Provider>
+          </LanguageProvider>
+      );
+  }
+
+  const renderView = () => {
+      switch (currentView) {
+          case 'dashboard': return <Dashboard setView={setCurrentView} />;
+          case 'tournaments': return <Tournaments userId={session.user.id} setView={setCurrentView} onViewContest={handleViewContest} />;
+          case 'wallet': return <Wallet />;
+          case 'leaderboard': return <Leaderboard />;
+          case 'profile': return <Profile session={session} />;
+          case 'transaction-history': return <TransactionHistory />;
+          case 'how-to-play': return <HowToPlay />;
+          case 'privacy-policy': return <PrivacyPolicy />;
+          case 'faq': return <FAQ />;
+          case 'support-chat': return <SupportChat />;
+          case 'about-us': return <AboutUs />;
+          case 'terms-and-conditions': return <TermsAndConditions />;
+          case 'refer-and-earn': return <ReferAndEarn setView={setCurrentView} />;
+          case 'refer-history': return <ReferHistory />;
+          case 'refer-leaderboard': return <ReferLeaderboard />;
+          case 'global-chat': return <GlobalChat />;
+          default: return <Dashboard setView={setCurrentView} />;
+      }
+  };
+
+  const getAppTheme = () => {
+      // Map internal theme names to light/dark
+      return theme === 'classic' ? 'light' : 'dark';
+  }
 
   return (
     <LanguageProvider>
-      <div style={appStyle}>
-        <AppConfigContext.Provider value={appConfig}>
-          {renderContent()}
-        </AppConfigContext.Provider>
-      </div>
+      <AppConfigContext.Provider value={appConfig}>
+        <Header 
+            unreadCount={unreadCount} 
+            onBellClick={() => setShowNotifications(true)} 
+            adminStatus={adminStatus} 
+            appTheme={getAppTheme()}
+            toggleAppTheme={toggleAppTheme}
+        />
+        
+        <main className="main-content-area page-content">
+            {renderView()}
+        </main>
+
+        <FooterNav 
+            currentView={currentView} 
+            setView={setCurrentView} 
+            onMoreClick={() => setIsMoreMenuOpen(true)} 
+        />
+
+        {isMoreMenuOpen && (
+            <MoreMenu 
+                setView={(view) => { setCurrentView(view); setIsMoreMenuOpen(false); }} 
+                onLogout={() => supabase?.auth.signOut()} 
+                isAdmin={isAdmin}
+                onEnterAdminView={() => { setCurrentView('admin'); setIsMoreMenuOpen(false); }}
+                appTheme={getAppTheme()}
+                toggleAppTheme={toggleAppTheme}
+            />
+        )}
+
+        {showNotifications && (
+            <NotificationsList 
+                onViewNotification={(n) => { setSelectedNotification(n); setShowNotifications(false); }} 
+                setUnreadCount={setUnreadCount}
+            />
+        )}
+
+        {selectedNotification && (
+            <NotificationDetails notification={selectedNotification} />
+        )}
+
+        <SupportChatWidget />
+        
+      </AppConfigContext.Provider>
     </LanguageProvider>
   );
 }
