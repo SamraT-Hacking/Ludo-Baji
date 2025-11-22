@@ -60,7 +60,7 @@ export const AppConfigContext = React.createContext({
 
 // IMPORTANT: This should be configured by the buyer.
 // It's the URL of their self-hosted licensing server.
-const LICENSE_SERVER_URL = 'https://licensing-server-hg9l.onrender.com'; // Default for local setup
+const LICENSE_SERVER_URL = 'http://localhost:4000'; // Default for local setup
 
 function App() {
   const [isLicensed, setIsLicensed] = useState(false);

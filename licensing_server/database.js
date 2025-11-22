@@ -14,18 +14,25 @@ let db = new sqlite3.Database(DB_SOURCE, (err) => {
             CREATE TABLE IF NOT EXISTS licenses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 purchase_code TEXT UNIQUE NOT NULL,
-                domain TEXT NOT NULL,
+                domain TEXT,
                 license_token_hash TEXT NOT NULL,
                 item_name TEXT,
                 buyer TEXT,
                 license_type TEXT,
                 supported_until TEXT,
-                activated_at TEXT
+                activated_at TEXT,
+                status TEXT DEFAULT 'active'
             )
         `;
         db.run(sql, (err) => {
             if (err) {
                 console.error("Error creating table:", err.message);
+            } else {
+                // Migration: Attempt to add status column if it doesn't exist (for existing dbs)
+                const alter = "ALTER TABLE licenses ADD COLUMN status TEXT DEFAULT 'active'";
+                db.run(alter, (err) => {
+                    // Ignore error if column already exists
+                });
             }
         });
     }
@@ -51,11 +58,21 @@ const getLicenseByToken = (db) => {
     });
 };
 
+const getAllLicenses = (db) => {
+    return new Promise((resolve, reject) => {
+        const sql = "SELECT * FROM licenses ORDER BY activated_at DESC";
+        db.all(sql, [], (err, rows) => {
+            if (err) reject(err);
+            resolve(rows);
+        });
+    });
+};
+
 const addLicense = (db, license) => {
     return new Promise((resolve, reject) => {
         const sql = `
-            INSERT INTO licenses (purchase_code, domain, license_token_hash, item_name, buyer, license_type, supported_until, activated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO licenses (purchase_code, domain, license_token_hash, item_name, buyer, license_type, supported_until, activated_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
         `;
         const params = [
             license.purchase_code, license.domain, license.license_token_hash, 
@@ -69,10 +86,33 @@ const addLicense = (db, license) => {
     });
 };
 
+const updateLicenseStatus = (db, id, status) => {
+    return new Promise((resolve, reject) => {
+        const sql = "UPDATE licenses SET status = ? WHERE id = ?";
+        db.run(sql, [status, id], function(err) {
+            if (err) reject(err);
+            resolve({ changes: this.changes });
+        });
+    });
+};
+
+const resetLicenseDomain = (db, id) => {
+    return new Promise((resolve, reject) => {
+        const sql = "UPDATE licenses SET domain = NULL WHERE id = ?";
+        db.run(sql, [id], function(err) {
+            if (err) reject(err);
+            resolve({ changes: this.changes });
+        });
+    });
+};
+
 
 module.exports = {
     initDb: () => db,
     getLicenseByCode,
     getLicenseByToken,
+    getAllLicenses,
     addLicense,
+    updateLicenseStatus,
+    resetLicenseDomain
 };

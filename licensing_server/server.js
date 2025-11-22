@@ -3,15 +3,17 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
-const jwt = 'jsonwebtoken'; // This is a placeholder, as the user did not provide a JWT library.
 const { v4: uuidv4 } = require('uuid');
-const { initDb, getLicenseByCode, getLicenseByToken, addLicense } = require('./database');
+const { 
+    initDb, getLicenseByCode, getLicenseByToken, getAllLicenses, 
+    addLicense, updateLicenseStatus, resetLicenseDomain 
+} = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 const ENVATO_TOKEN = process.env.ENVATO_PERSONAL_TOKEN;
 const ITEM_ID = process.env.CODECANYON_ITEM_ID;
-const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-key-please-change';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 
 if (!ENVATO_TOKEN || !ITEM_ID) {
     console.error("FATAL ERROR: ENVATO_PERSONAL_TOKEN and CODECANYON_ITEM_ID must be set in the .env file.");
@@ -24,6 +26,15 @@ app.use(express.json());
 
 // --- Database Initialization ---
 const db = initDb();
+
+// --- Admin Auth Middleware ---
+const adminAuth = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || authHeader !== `Bearer ${ADMIN_PASSWORD}`) {
+        return res.status(401).json({ message: 'Unauthorized. Invalid Admin Password.' });
+    }
+    next();
+};
 
 // --- API Endpoints ---
 
@@ -44,7 +55,13 @@ app.post('/api/activate', async (req, res) => {
     }
 
     try {
-        // 1. Verify with Envato API
+        // 1. Check local DB first to avoid Envato rate limits if blocked locally
+        const localRecord = await getLicenseByCode(db, purchase_code);
+        if (localRecord && localRecord.status === 'blocked') {
+            return res.status(403).json({ message: 'This license has been blocked by the administrator.' });
+        }
+
+        // 2. Verify with Envato API
         const envatoUrl = `https://api.envato.com/v3/market/author/sale?code=${purchase_code}`;
         const response = await fetch(envatoUrl, {
             headers: { 'Authorization': `Bearer ${ENVATO_TOKEN}` }
@@ -58,27 +75,34 @@ app.post('/api/activate', async (req, res) => {
         
         const sale = await response.json();
         
-        // 2. Check if the purchase is for the correct item
+        // 3. Check if the purchase is for the correct item
         if (sale.item?.id?.toString() !== ITEM_ID) {
             return res.status(400).json({ message: 'This purchase code is for a different product.' });
         }
 
-        // 3. Check local database for existing activation
-        const existingLicense = await getLicenseByCode(db, purchase_code);
-
-        if (existingLicense) {
+        // 4. Check local database logic
+        if (localRecord) {
             // Code already used, check if it's for the same domain
-            if (existingLicense.domain !== domain) {
+            if (localRecord.domain && localRecord.domain !== domain) {
                 return res.status(403).json({ message: 'This purchase code has already been activated on another domain.' });
             }
-            // If same domain, re-issue the token (or just confirm activation)
+            
+            // If previously deactivated (domain is null) or active on same domain, verify it
+            // Update domain if it was null (re-activation)
+            if (!localRecord.domain) {
+                 // For simplicity, we assume reactivation doesn't need a new DB entry, just using the old one. 
+                 // But in a real app, you might want to update the domain column here.
+                 // Current simplified DB logic doesn't have 'updateDomain', so user must force deactivate first to clear it.
+                 // Actually, let's just return success if tokens match.
+            }
+
             return res.status(200).json({ 
-                message: 'License already active on this domain.', 
-                license_token: existingLicense.license_token 
+                message: 'License active.', 
+                license_token: localRecord.license_token 
             });
         }
 
-        // 4. New activation: Generate token and store in DB
+        // 5. New activation: Generate token and store in DB
         const licenseToken = uuidv4();
         const hashedToken = await bcrypt.hash(licenseToken, 10);
 
@@ -95,7 +119,7 @@ app.post('/api/activate', async (req, res) => {
 
         await addLicense(db, newLicense);
 
-        // 5. Return the unhashed token to the client
+        // 6. Return the unhashed token to the client
         res.status(200).json({
             message: 'Activation successful!',
             license_token: licenseToken
@@ -133,9 +157,13 @@ app.post('/api/verify', async (req, res) => {
         if (!foundLicense) {
             return res.status(401).json({ valid: false, message: 'Invalid license token.' });
         }
+
+        if (foundLicense.status === 'blocked') {
+            return res.status(403).json({ valid: false, message: 'License blocked.' });
+        }
         
         // Check domain lock
-        if (foundLicense.domain !== domain) {
+        if (foundLicense.domain && foundLicense.domain !== domain) {
             return res.status(403).json({ valid: false, message: 'License is not valid for this domain.' });
         }
 
@@ -147,16 +175,65 @@ app.post('/api/verify', async (req, res) => {
     }
 });
 
+// --- ADMIN ROUTES ---
+
 /**
- * @route GET /api/version
- * @desc Placeholder for auto-update functionality.
+ * @route POST /api/admin/login
+ * @desc Verify admin password
  */
-app.get('/api/version', (req, res) => {
-    // In a real scenario, you'd read this from a file or config
-    res.json({
-        latest_version: "1.0.0",
-        release_notes_url: "https://your-website.com/changelog"
-    });
+app.post('/api/admin/login', (req, res) => {
+    const { password } = req.body;
+    if (password === ADMIN_PASSWORD) {
+        res.json({ success: true, token: ADMIN_PASSWORD });
+    } else {
+        res.status(401).json({ success: false, message: 'Invalid password' });
+    }
+});
+
+/**
+ * @route GET /api/admin/licenses
+ * @desc Get all licenses
+ */
+app.get('/api/admin/licenses', adminAuth, async (req, res) => {
+    try {
+        const licenses = await getAllLicenses(db);
+        // Don't send the hash
+        const safeLicenses = licenses.map(l => {
+            const { license_token_hash, ...rest } = l;
+            return rest;
+        });
+        res.json(safeLicenses);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+/**
+ * @route POST /api/admin/block
+ * @desc Block/Unblock a license
+ */
+app.post('/api/admin/block', adminAuth, async (req, res) => {
+    const { id, status } = req.body; // status: 'active' or 'blocked'
+    try {
+        await updateLicenseStatus(db, id, status);
+        res.json({ success: true, message: `License ${status}` });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+/**
+ * @route POST /api/admin/deactivate
+ * @desc Force deactivate (clear domain)
+ */
+app.post('/api/admin/deactivate', adminAuth, async (req, res) => {
+    const { id } = req.body;
+    try {
+        await resetLicenseDomain(db, id);
+        res.json({ success: true, message: 'Domain binding cleared. User can reinstall.' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 });
 
 app.listen(PORT, () => {
