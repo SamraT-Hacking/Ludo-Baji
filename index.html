@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -334,8 +335,22 @@
             padding-bottom: calc(var(--footer-height) + 1.5rem);
             transition: background-color 0.3s ease;
         }
+        
+        /* Global Page Padding Helper */
         .page-content {
-             padding: 1rem;
+             padding: 0;
+        }
+        
+        /* Specific page containers that need padding */
+        .wallet-page-container,
+        .profile-page-container,
+        .leaderboard-page,
+        .refer-page-container,
+        .transaction-history-container,
+        .how-to-play-container,
+        .notification-details-page,
+        .dashboard-container {
+            padding: 1rem;
         }
 
         /* Tournaments Page - Modern Tab Design */
@@ -344,14 +359,18 @@
             display: flex;
             justify-content: flex-start;
             overflow-x: auto;
-            padding: 0.5rem;
+            padding: 5px 0;
             -webkit-overflow-scrolling: touch;
-            position: sticky;
+            position: fixed;
             top: var(--header-height);
-            z-index: 10;
+            left: 0;
+            width: 100%;
+            z-index: 99;
             border-bottom: 1px solid var(--border-color);
             box-shadow: 0 2px 4px var(--shadow-color);
             transition: background-color 0.3s ease, border-color 0.3s ease;
+            margin: 0;
+            border-radius: 0;
         }
         .tabs-container::-webkit-scrollbar {
             display: none;
@@ -379,11 +398,23 @@
         .tab-item.active::after {
             display: none;
         }
+        
+        /* Tournament List */
         .tournament-list {
-            padding: 1rem;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1rem;
+            padding: 0.5rem; /* Minimal side padding */
+            padding-top: 60px; /* Offset for fixed tabs */
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        @media (min-width: 768px) {
+            .tournament-list {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+                gap: 1rem;
+                padding: 1rem;
+                padding-top: 70px;
+            }
         }
 
         /* Tournament Card - Compact & Modern Layout */
@@ -397,6 +428,7 @@
             overflow: hidden;
             border: 1px solid var(--border-color);
             transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.3s ease, border-color 0.3s ease;
+            width: 100%;
         }
         .tournament-card:hover {
             transform: translateY(-4px);
@@ -929,10 +961,6 @@
         }
 
         /* Notification Details Page */
-        .notification-details-page {
-            background-color: var(--bg-card);
-            color: var(--text-main);
-        }
         .notification-details-content {
             padding: 1rem;
         }
@@ -1001,7 +1029,7 @@
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 1.5rem;
-            padding: 1rem;
+            /* Padding handled by generic page container class */
         }
         .video-card {
             background-color: var(--bg-card);

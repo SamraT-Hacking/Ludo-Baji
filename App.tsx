@@ -414,7 +414,7 @@ function App() {
             toggleAppTheme={toggleAppTheme}
         />
         
-        <main className="main-content-area page-content">
+        <main className="main-content-area">
             {renderView()}
         </main>
 

@@ -114,7 +114,7 @@ const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     };
 
     return (
-        <div>
+        <div className="dashboard-container">
             <h1 style={headerStyle}>{t('nav_dashboard', 'Dashboard')}</h1>
             <div style={cardContainerStyle}>
                 <div style={cardStyle}>
