@@ -528,6 +528,7 @@ function App() {
                 onEnterAdminView={() => { window.location.hash = 'admin'; setIsMoreMenuOpen(false); }}
                 appTheme={getAppTheme()}
                 toggleAppTheme={toggleAppTheme}
+                onClose={() => setIsMoreMenuOpen(false)}
             />
         )}
 
